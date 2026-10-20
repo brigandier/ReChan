@@ -88,6 +88,7 @@ enum EntryBinding : u8 {
     EntryBinding_PlayerConfig,
     EntryBinding_ControllerPromptStyle,
     EntryBinding_Language,
+    EntryBinding_Subtitles,
     EntryBinding_DisplayResolution,
     EntryBinding_DisplayScreenMode,
     EntryBinding_DisplayVsync,

@@ -3,6 +3,7 @@
 #include "pc/apppaths.h"
 
 struct GameSettings {
+    bool subtitlesEnabled = true;
     bool Load(const char* path);
     bool Save(const char* path);
 };

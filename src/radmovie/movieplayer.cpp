@@ -2,6 +2,9 @@
 #include "radmovie/movieplayer.h"
 #include "pc/audio.h"
 #include "pc/tim.h"
+#include "pc/settings.h"
+#include "pc/textmgr.h"
+#include "extra/customtext.h"
 #include "p3d/texture.h"
 #include "p3d/context.h"
 #include "pddi/pddi.h"
@@ -274,10 +277,56 @@ bool MoviePlayer::Open(const char* path) {
     LOG("[MoviePlayer] Opened %s: %ux%u, %u sectors (%u bytes/sector, %u payload), %u audio samples, %.1f fps",
         path, frameWidth, frameHeight, sectorCount, sectorSize, videoChunkData, audioPCMWritten,
         1.0 / frameInterval);
+    LoadSubtitles(path);
     return true;
 }
 
+void MoviePlayer::LoadSubtitles(const char* moviePath) {
+    subtitles.Clear();
+    if (g_customText.GetLanguage() != LangPortugueseBrazil) return;
+    std::string name(moviePath);
+    const size_t slash = name.find_last_of("/\\");
+    if (slash != std::string::npos) name.erase(0, slash + 1);
+    const size_t dot = name.find_last_of('.');
+    if (dot != std::string::npos) name.resize(dot);
+    for (char& c : name) if (c >= 'a' && c <= 'z') c = (char)(c - 'a' + 'A');
+    if (name != "PROLOG" && name != "FACTORY" && name != "MAKING"
+        && name != "VICTORY" && name != "CREDITS") return;
+    const std::string path = "pc/subtitles/pt-BR/" + name + ".srt";
+    u8* data = nullptr;
+    u32 size = 0;
+    if (!xcReadFileLow(path.c_str(), &data, &size)) return;
+    if (!subtitles.Parse(std::string_view((const char*)data, size))) {
+        LOG("[MoviePlayer] Invalid or empty subtitles: %s", path.c_str());
+    }
+    delete[] data;
+}
+
+void MoviePlayer::RenderSubtitles() const {
+    if (!g_settings.subtitlesEnabled || !g_textManager || !videoTexture || finished) return;
+    const std::string text = subtitles.TextAt(MovieSyncElapsedSeconds(this));
+    if (text.empty()) return;
+
+    ScreenDraw::Batch batch;
+    g_textManager->PushState();
+    if (g_textManager->SetFontByName("Legal")) {
+        g_textManager->SetScale(SCREEN_SCALE_Y(0.48f));
+        g_textManager->SetWrapWidth(SCREEN_SCALE_X(DEFAULT_SCREEN_WIDTH * 0.88f));
+        g_textManager->SetLineSpacing((s32)SCREEN_SCALE_Y(2.0f));
+        g_textManager->SetAlignment(TextAlign_Center);
+        g_textManager->SetColor(255, 255, 255);
+        g_textManager->SetPromptsEnabled(false);
+        g_textManager->SetShadow(true, SCREEN_SCALE_Y(1.0f), SCREEN_SCALE_Y(1.0f));
+        g_textManager->SetOutline(true, SCREEN_SCALE_Y(1.0f));
+        const TextBounds bounds = g_textManager->MeasureString(Utf8TextView(text));
+        g_textManager->PrintString(Utf8TextView(text), SCALE_AND_CENTER_X(DEFAULT_SCREEN_WIDTH * 0.5f),
+            SCREEN_HEIGHT - SCREEN_SCALE_Y(18.0f) - bounds.height);
+    }
+    g_textManager->PopState();
+}
+
 void MoviePlayer::Close() {
+    subtitles.Clear();
     MovieSyncReset(this);
     if (audioVoice) {
         AudioEngine::StopVoice(audioVoice);
@@ -693,6 +742,7 @@ void MoviePlayer::Render() {
                 true);
         }
     }
+    RenderSubtitles();
 }
 
 // BitReader

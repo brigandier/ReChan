@@ -1,5 +1,6 @@
 #pragma once
 #include "core.h"
+#include "radmovie/subtitles.h"
 
 class tTexture;
 class pddiRenderTarget;
@@ -34,6 +35,10 @@ public:
     f32 GetFrameRate() const { return (f32)(1.0 / frameInterval); }
 
 private:
+    void LoadSubtitles(const char* moviePath);
+    void RenderSubtitles() const;
+    MovieSubtitles subtitles;
+
     // STR sector parsing
     // Sector formats: raw (2352), Mode2 without sync (2336), or headerless (2048)
     // Detected at Open() time based on file content.
