@@ -173,7 +173,7 @@ Configuration:
 Button Prompts:
 
 [FE_DEFX]
-Default (Xbox)
+Xbox
 
 [FE_NX]
 Nintendo Switch

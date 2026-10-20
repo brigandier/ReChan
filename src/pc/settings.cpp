@@ -268,7 +268,7 @@ static void SetPlayerConfigSetting(s32 value) {
 }
 
 static s32 GetControllerPromptStyleSetting() {
-    return ControllerPromptManager::GetStyle();
+    return ControllerPromptManager::GetPreference();
 }
 
 static void SetControllerPromptStyleSetting(s32 value) {
@@ -349,6 +349,9 @@ static s32 GetLanguageSetting() {
     return (s32)g_customText.GetLanguage();
 }
 
+static s32 GetSubtitlesSetting() { return g_settings.subtitlesEnabled ? 1 : 0; }
+static void SetSubtitlesSetting(s32 value) { g_settings.subtitlesEnabled = value != 0; }
+
 static void SetLanguageSetting(s32 v) {
     if (v < 0 || v >= (s32)NumLanguages) {
         v = (s32)LangEnglish;
@@ -381,6 +384,7 @@ static void SetShadowQualitySetting(s32 v) {
 
 static const SettingDef kSettingDefs[] = {
     { "general", "language",      0, 0, (s32)NumLanguages - 1, GetLanguageSetting,    SetLanguageSetting },
+    { "general", "subtitles",     1, 0, 1, GetSubtitlesSetting, SetSubtitlesSetting },
     { "audio", "music_volume",   100, 0, 100, GetMusicVolume,   SetMusicVolume },
     { "audio", "effects_volume", 100, 0, 100, GetEffectsVolume, SetEffectsVolume },
     { "audio", "dialog_volume",  100, 0, 100, GetDialogVolume,  SetDialogVolume },

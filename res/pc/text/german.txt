@@ -173,7 +173,7 @@ Konfiguration:
 Tastenanzeige:
 
 [FE_DEFX]
-Standard (Xbox)
+Xbox
 
 [FE_NX]
 Nintendo Switch

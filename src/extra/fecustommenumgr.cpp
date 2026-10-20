@@ -529,6 +529,7 @@ static const char* GetLanguageDisplayToken(s32 index) {
         case LangFrench: return "FE_LFRE";
         case LangItalian: return "FE_LITA";
         case LangSpanish: return "FE_LSPA";
+        case LangPortugueseBrazil: return "FE_LPOR";
         default: return nullptr;
     }
 }
@@ -658,6 +659,7 @@ void feCustomMenuMgr::BuildPages() {
         Slider("FE_MSV", EntryBinding_MusicVol,   10, 0, 100),
         Slider("FE_VCV", EntryBinding_DialogVol,  10, 0, 100),
         Toggle("FE_STR", EntryBinding_Stereo),
+        Toggle("FE_SUB", EntryBinding_Subtitles),
         Button("FE_BCK", EntryEvent_Back),
                });
 
@@ -2855,8 +2857,9 @@ s32 feCustomMenuMgr::GetBoundValue(const Entry& e) const {
         case EntryBinding_Stereo: return (g_sound && g_sound->activeFlag) ? 1 : 0;
         case EntryBinding_Shock: return GetShock() ? 1 : 0;
         case EntryBinding_PlayerConfig: return g_inputManager ? (s32)g_inputManager->GetPlayerConfig() : 0;
-        case EntryBinding_ControllerPromptStyle: return ControllerPromptManager::GetStyle();
+        case EntryBinding_ControllerPromptStyle: return ControllerPromptManager::GetMenuIndex();
         case EntryBinding_Language: return (s32)g_customText.GetLanguage();
+        case EntryBinding_Subtitles: return g_settings.subtitlesEnabled ? 1 : 0;
         case EntryBinding_DisplayResolution: return g_display ? g_display->GetResolutionIndex() : 0;
         case EntryBinding_DisplayScreenMode: return g_display ? g_display->GetScreenMode() : Display::GetDefaultScreenMode();
         case EntryBinding_DisplayVsync: return g_display ? g_display->GetVsync() : Display::GetDefaultVsync();
@@ -2942,8 +2945,11 @@ void feCustomMenuMgr::ApplyValue(const Entry& e, s32 v) {
         }
         g_customText.SetLanguage((GameLanguage)v);
     }
+    else if (e.binding == EntryBinding_Subtitles) {
+        g_settings.subtitlesEnabled = v != 0;
+    }
     else if (e.binding == EntryBinding_ControllerPromptStyle) {
-        if (ControllerPromptManager::SetStyle(v)) {
+        if (ControllerPromptManager::SetStyle(kControllerPromptMenuStyles[v])) {
             ReloadControllerPromptTextures();
         }
     }
@@ -5273,7 +5279,7 @@ void feCustomMenuMgr::RenderCurrentPage() {
                     g_textManager->PrintString(frameRateText, valueScreenX, rowScreenY);
                 }
                 else if (item.binding == EntryBinding_ControllerPromptStyle) {
-                    const s32 style = ClampControllerPromptStyle(GetBoundValue(item));
+                    const s32 style = kControllerPromptMenuStyles[GetBoundValue(item)];
                     const char* styleText = Localize(kControllerPromptStyles[style].displayToken);
 
                     if (!styleText) {

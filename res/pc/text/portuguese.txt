@@ -55,13 +55,13 @@ Estilo
 Nota
 
 [FE_TLRD]
-Dragões vermelhos
+Dragões Vermelhos
 
 [FE_TLGO]
-Dragões dourados
+Dragões de Ouro
 
 [FE_TLBG]
-BÔNUS +1 DRAGÃO DOURADO
+BÔNUS +1 DRAGÃO DE OURO
 
 [FE_TLDB]
 BÔNUS DE DRAGÃO
@@ -118,10 +118,10 @@ SALVO
 VIDAS
 
 [FE_SVC_RED]
-VERMELHOS
+VERMELHO
 
 [FE_SVC_GOLD]
-DOURADOS
+OURO
 
 [FE_SVC_ZONE]
 PRÓXIMA ZONA
@@ -172,7 +172,7 @@ Configuração:
 Ícones de Botões:
 
 [FE_DEFX]
-Padrão (Xbox)
+Xbox
 
 [FE_NX]
 Nintendo Switch
@@ -331,7 +331,7 @@ Pressione uma tecla ou botão do mouse
 <ACT:MENU_BACK> Voltar
 
 [FE_NTD]
-Sem uso
+Não Usado
 
 [FE_RES]
 Resolução:
@@ -394,7 +394,7 @@ Volume dos Efeitos:
 Volume da Música:
 
 [FE_VCV]
-Volume das vozes:
+Volume da Voz:
 
 [FE_STR]
 Estéreo:
@@ -499,7 +499,7 @@ JACKIE
 CHEFE
 
 [FE_DTG]
-TOTAL DE DRAGÕES DOURADOS  %d
+TOTAL DE DRAGÕES DE OURO  %d
 
 [FE_DTRV]
 VIAJAR PARA
@@ -607,7 +607,7 @@ Todos os Dragões:
 Todas as fases:
 
 [FE_CH_GOD]
-Invencibilidade:
+Modo Deus:
 
 [FE_CH_PNCH]
 Um soco só:

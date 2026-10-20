@@ -173,7 +173,7 @@ Configurazione:
 Icone pulsanti:
 
 [FE_DEFX]
-Predefinito (Xbox)
+Xbox
 
 [FE_NX]
 Nintendo Switch

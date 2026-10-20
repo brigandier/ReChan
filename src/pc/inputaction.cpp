@@ -2,6 +2,11 @@
 #include "p3d/input.h"
 #include "pddi/pddidev.h"
 #include "gen/control.h"
+#if CUSTOM_MENU
+#include "extra/controllerpromptstyle.h"
+#include "extra/fecustommenumgr.h"
+#include "extra/prompticons.h"
+#endif
 
 static const char* kActionTokens[ACTION_COUNT] = {
     "JUMP",
@@ -345,6 +350,13 @@ void ActionInput::Update(PlatformInput* platform) {
     if (!platform) {
         return;
     }
+
+#if CUSTOM_MENU
+    if (ControllerPromptManager::SetDetectedFamily(platform->GetGamepadFamily())) {
+        if (g_feCustomMenuMgr) g_feCustomMenuMgr->ReloadControllerPromptTextures();
+        else PromptIcons::ResetGamepadSheet();
+    }
+#endif
 
 #if !defined(RC_PLATFORM_SWITCH)
     for (s32 i = 0; i < 3; i++) {

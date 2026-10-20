@@ -173,7 +173,7 @@ Configuracion:
 Iconos de botones:
 
 [FE_DEFX]
-Predeterminado (Xbox)
+Xbox
 
 [FE_NX]
 Nintendo Switch
