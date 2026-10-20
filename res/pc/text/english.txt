@@ -640,3 +640,12 @@ Mirror World:
 
 [0xC131692D]
 Press <ACT:OPEN_CLOSE_MENU> to open the main menu.
+
+[FE_LPOR]
+Português (Brasil)
+
+[FE_PS]
+PlayStation
+
+[FE_SUB]
+Subtitles:

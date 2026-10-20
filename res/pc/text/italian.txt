@@ -640,3 +640,12 @@ Mondo Specchio:
 
 [0xC131692D]
 Premi <ACT:OPEN_CLOSE_MENU> per aprire il menu principale.
+
+[FE_LPOR]
+Português (Brasil)
+
+[FE_PS]
+PlayStation
+
+[FE_SUB]
+Sottotitoli:

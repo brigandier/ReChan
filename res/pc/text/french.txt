@@ -640,3 +640,12 @@ Monde Miroir :
 
 [0xC131692D]
 Appuyez sur <ACT:OPEN_CLOSE_MENU> pour ouvrir le menu principal.
+
+[FE_LPOR]
+Português (Brasil)
+
+[FE_PS]
+PlayStation
+
+[FE_SUB]
+Sous-titres :

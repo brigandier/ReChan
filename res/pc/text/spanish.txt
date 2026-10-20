@@ -640,3 +640,12 @@ Mundo Espejo:
 
 [0xC131692D]
 Pulsa <ACT:OPEN_CLOSE_MENU> para abrir el menu principal.
+
+[FE_LPOR]
+Português (Brasil)
+
+[FE_PS]
+PlayStation
+
+[FE_SUB]
+Subtítulos:

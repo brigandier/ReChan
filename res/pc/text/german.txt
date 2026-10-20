@@ -640,3 +640,12 @@ Spiegelwelt:
 
 [0xC131692D]
 Druecke <ACT:OPEN_CLOSE_MENU>, um das Hauptmenue zu oeffnen.
+
+[FE_LPOR]
+Português (Brasil)
+
+[FE_PS]
+PlayStation
+
+[FE_SUB]
+Untertitel:
