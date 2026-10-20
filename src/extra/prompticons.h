@@ -386,6 +386,21 @@ private:
     }
 
     static const char* GamepadButtonToLabel(s32 button) {
+        if (ControllerPromptManager::GetStyle() == ControllerPromptStyle_PlayStation) {
+            switch (button) {
+                case GpBtn::A: return "Cross";
+                case GpBtn::B: return "Circle";
+                case GpBtn::X: return "Square";
+                case GpBtn::Y: return "Triangle";
+                case GpBtn::LB: return "L1";
+                case GpBtn::RB: return "R1";
+                case GpBtn::LStick: return "L3";
+                case GpBtn::RStick: return "R3";
+                case GpBtn::Back: return "Select";
+                case GpBtn::Start: return "Menu";
+                default: break;
+            }
+        }
         switch (button) {
             case GpBtn::A: return "A";
             case GpBtn::B: return "B";
@@ -570,6 +585,18 @@ private:
             case GpBtn::Back:
                 idx = MakeGridIndex(GetControllerMenuGrid(), 1, 0);
                 break;
+            case GpBtn::LB:
+                idx = MakeGridIndex(GetControllerShoulderGrid(), 0, 0);
+                break;
+            case GpBtn::RB:
+                idx = MakeGridIndex(GetControllerShoulderGrid(), 1, 0);
+                break;
+            case GpBtn::LStick:
+                idx = MakeGridIndex(GetControllerStickPressGrid(), 0, 0);
+                break;
+            case GpBtn::RStick:
+                idx = MakeGridIndex(GetControllerStickPressGrid(), 1, 0);
+                break;
             case GpBtn::DpadLeft:
             case GpBtn::DpadRight:
             case GpBtn::DpadUp:
@@ -678,6 +705,16 @@ private:
             96, 96,
             154, 154
         };
+        return grid;
+    }
+
+    static const PromptGrid& GetControllerShoulderGrid() {
+        static const PromptGrid grid = { 632, 1808, 0, 336, 128, 128, 168, 168 };
+        return grid;
+    }
+
+    static const PromptGrid& GetControllerStickPressGrid() {
+        static const PromptGrid grid = { 632, 1808, 0, 1512, 128, 160, 168, 168 };
         return grid;
     }
 
