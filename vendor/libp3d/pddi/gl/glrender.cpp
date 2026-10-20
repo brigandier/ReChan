@@ -2475,8 +2475,7 @@ float glGamepad::GetAxis(int axis) const {
 
 bool glGamepad::SupportsVibration() const {
 #if defined(P3D_USE_VENDORED_SDL2)
-    (void)glGamepadRumbleUpdateActive(-1, nullptr);
-    return glGamepadRumbleSupports();
+    return connected && glGamepadRumbleSupports();
 #else
     const int hintIndex = (connected && activeJoystickId >= GLFW_JOYSTICK_1)
         ? (activeJoystickId - GLFW_JOYSTICK_1)
@@ -2495,8 +2494,7 @@ bool glGamepad::SupportsVibration() const {
 
 bool glGamepad::SetVibration(float lowFrequency, float highFrequency) {
 #if defined(P3D_USE_VENDORED_SDL2)
-    (void)glGamepadRumbleUpdateActive(-1, nullptr);
-    return glGamepadRumbleSet(lowFrequency, highFrequency);
+    return connected && glGamepadRumbleSet(lowFrequency, highFrequency);
 #else
     const int hintIndex = (connected && activeJoystickId >= GLFW_JOYSTICK_1)
         ? (activeJoystickId - GLFW_JOYSTICK_1)

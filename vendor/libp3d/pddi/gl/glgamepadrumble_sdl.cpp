@@ -194,20 +194,15 @@ static bool ActiveBindingCanRumble() {
     }
 
 #if SDL_VERSION_ATLEAST(2, 0, 18)
-    if (g_activeController && SDL_GameControllerHasRumble(g_activeController) == SDL_TRUE) {
-        return true;
-    }
-
-    if (g_activeJoystick && SDL_JoystickHasRumble(g_activeJoystick) == SDL_TRUE) {
-        return true;
-    }
-#endif
-
+    return (g_activeController && SDL_GameControllerHasRumble(g_activeController) == SDL_TRUE)
+        || (g_activeJoystick && SDL_JoystickHasRumble(g_activeJoystick) == SDL_TRUE);
+#else
     if (g_activeController && SDL_GameControllerRumble(g_activeController, 0, 0, 0) == 0) {
         return true;
     }
 
     return g_activeJoystick && SDL_JoystickRumble(g_activeJoystick, 0, 0, 0) == 0;
+#endif
 }
 
 static float NormalizeSignedAxis(Sint16 value) {
