@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core.h"
+#include "pddi/gamepadfamily.h"
 #include <unordered_map>
 
 class pddiDisplay;
@@ -31,6 +32,7 @@ public:
 
     // Gamepad queries
     bool IsGamepadConnected() const { return gamepadConnected; }
+    GamepadFamily GetGamepadFamily() const;
     bool IsGamepadButtonDown(int button) const;
     bool IsGamepadButtonTriggered(int button) const;
     float GetGamepadAxis(int axis) const;

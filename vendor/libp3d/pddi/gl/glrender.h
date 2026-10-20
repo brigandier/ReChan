@@ -477,6 +477,8 @@ public:
 
 class glGamepad : public pddiGamepad {
 public:
+    ~glGamepad() override;
+    GamepadFamily GetFamily() const override { return family; }
     void Poll() override;
     bool IsConnected() const override { return connected; }
     bool IsButtonDown(int button) const override;
@@ -485,8 +487,11 @@ public:
     bool SetVibration(float lowFrequency, float highFrequency) override;
 
 private:
+    GamepadFamily family = GamepadFamily::Unknown;
     bool connected = false;
     bool buttons[GamepadButton::COUNT] = {};
     float axes[GamepadAxis::COUNT] = {};
     int activeJoystickId = -1;
+    bool previousButtons[16][GamepadButton::COUNT] = {};
+    float previousAxes[16][GamepadAxis::COUNT] = {};
 };

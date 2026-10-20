@@ -1,6 +1,10 @@
 #include "pddi/gl/glgamepadrumble_sdl.h"
 
 #include <cstring>
+#include <array>
+#include <vector>
+#include <algorithm>
+#include <cmath>
 
 #if defined(P3D_USE_VENDORED_SDL2)
 #include "SDL.h"
@@ -49,18 +53,27 @@ static void CopyGuid(char* dst, int dstSize, const char* src) {
 static SDL_GameController* g_activeController = nullptr;
 static SDL_Joystick* g_activeJoystick = nullptr;
 static bool g_activeJoystickOpenedDirect = false;
+static bool g_activeControllerFromPoll = false;
+struct PolledController {
+    SDL_GameController* controller = nullptr;
+    std::array<Uint8, SDL_CONTROLLER_BUTTON_MAX> buttons = {};
+    std::array<Sint16, SDL_CONTROLLER_AXIS_MAX> axes = {};
+};
+static std::vector<PolledController> g_polledControllers;
 static char g_activeGuid[64] = {};
 static bool g_sdlMainReady = false;
 
 static void CloseActiveController() {
     if (g_activeController) {
-        SDL_GameControllerClose(g_activeController);
+        SDL_GameControllerRumble(g_activeController, 0, 0, 0);
+        if (!g_activeControllerFromPoll) SDL_GameControllerClose(g_activeController);
     }
     else if (g_activeJoystickOpenedDirect && g_activeJoystick) {
         SDL_JoystickClose(g_activeJoystick);
     }
 
     g_activeController = nullptr;
+    g_activeControllerFromPoll = false;
     g_activeJoystick = nullptr;
     g_activeJoystickOpenedDirect = false;
     g_activeGuid[0] = '\0';
@@ -78,6 +91,12 @@ static void GetJoystickGuidString(SDL_Joystick* joystick, char* outGuid, int out
 
     const SDL_JoystickGUID guid = SDL_JoystickGetGUID(joystick);
     SDL_JoystickGetGUIDString(guid, outGuid, outGuidSize);
+}
+
+void glGamepadShutdown() {
+    CloseActiveController();
+    for (auto& device : g_polledControllers) SDL_GameControllerClose(device.controller);
+    g_polledControllers.clear();
 }
 
 static bool BindControllerAtIndex(int sdlIndex, const char* expectedGuid, bool requireGuidMatch) {
@@ -224,20 +243,50 @@ bool glGamepadPollState(bool outButtons[15], float outAxes[6]) {
 
     SDL_GameControllerUpdate();
 
-    if (g_activeController) {
-        SDL_Joystick* joystick = SDL_GameControllerGetJoystick(g_activeController);
-        if (!joystick || SDL_JoystickGetAttached(joystick) != SDL_TRUE) {
-            CloseActiveController();
+    for (auto it = g_polledControllers.begin(); it != g_polledControllers.end();) {
+        if (SDL_GameControllerGetAttached(it->controller) != SDL_TRUE) {
+            if (g_activeController == it->controller) CloseActiveController();
+            SDL_GameControllerClose(it->controller);
+            it = g_polledControllers.erase(it);
+        }
+        else ++it;
+    }
+    if (g_activeController && SDL_GameControllerGetAttached(g_activeController) != SDL_TRUE) CloseActiveController();
+
+    for (int i = 0; i < SDL_NumJoysticks(); ++i) {
+        if (!SDL_IsGameController(i)) continue;
+        const SDL_JoystickID id = SDL_JoystickGetDeviceInstanceID(i);
+        const bool known = std::any_of(g_polledControllers.begin(), g_polledControllers.end(), [id](const auto& c) {
+            return SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(c.controller)) == id;
+        });
+        if (!known) {
+            if (auto* controller = SDL_GameControllerOpen(i)) g_polledControllers.push_back({controller});
         }
     }
 
-    if (!g_activeController) {
-        const int joystickCount = SDL_NumJoysticks();
-        for (int i = 0; i < joystickCount; i++) {
-            if (BindControllerAtIndex(i, nullptr, false)) {
-                break;
-            }
+    SDL_GameController* selected = g_activeController;
+    for (auto& device : g_polledControllers) {
+        bool activity = false;
+        for (int b = 0; b < SDL_CONTROLLER_BUTTON_MAX; ++b) {
+            const Uint8 value = SDL_GameControllerGetButton(device.controller, (SDL_GameControllerButton)b);
+            activity |= value && !device.buttons[b];
+            device.buttons[b] = value;
         }
+        for (int a = 0; a < SDL_CONTROLLER_AXIS_MAX; ++a) {
+            const Sint16 value = SDL_GameControllerGetAxis(device.controller, (SDL_GameControllerAxis)a);
+            // Ignore resting triggers and stick drift when choosing the active device.
+            activity |= (a < SDL_CONTROLLER_AXIS_TRIGGERLEFT ? std::abs((int)value) > 8000 : value > 8000)
+                && std::abs((int)value - device.axes[a]) > 4000;
+            device.axes[a] = value;
+        }
+        if (!selected || activity) selected = device.controller;
+    }
+    if (selected && (selected != g_activeController || !g_activeControllerFromPoll)) {
+        CloseActiveController();
+        g_activeController = selected;
+        g_activeControllerFromPoll = true;
+        g_activeJoystick = SDL_GameControllerGetJoystick(selected);
+        GetJoystickGuidString(g_activeJoystick, g_activeGuid, (int)sizeof(g_activeGuid));
     }
 
     if (!g_activeController) {
@@ -278,6 +327,22 @@ bool glGamepadPollState(bool outButtons[15], float outAxes[6]) {
     }
 
     return true;
+}
+
+GamepadFamily glGamepadGetFamily() {
+    if (!g_activeController || SDL_GameControllerGetAttached(g_activeController) != SDL_TRUE) return GamepadFamily::Unknown;
+    switch (SDL_GameControllerGetType(g_activeController)) {
+        case SDL_CONTROLLER_TYPE_PS3:
+        case SDL_CONTROLLER_TYPE_PS4:
+        case SDL_CONTROLLER_TYPE_PS5: return GamepadFamily::PlayStation;
+        case SDL_CONTROLLER_TYPE_XBOX360:
+        case SDL_CONTROLLER_TYPE_XBOXONE: return GamepadFamily::Xbox;
+        case SDL_CONTROLLER_TYPE_NINTENDO_SWITCH_PRO:
+        case SDL_CONTROLLER_TYPE_NINTENDO_SWITCH_JOYCON_LEFT:
+        case SDL_CONTROLLER_TYPE_NINTENDO_SWITCH_JOYCON_RIGHT:
+        case SDL_CONTROLLER_TYPE_NINTENDO_SWITCH_JOYCON_PAIR: return GamepadFamily::Switch;
+        default: return GamepadFamily::Unknown;
+    }
 }
 
 bool glGamepadRumbleUpdateActive(int glfwGamepadIndex, const char* glfwGuid) {
@@ -395,6 +460,9 @@ bool glGamepadRumbleSet(float lowFrequency, float highFrequency) {
 }
 
 #else
+
+GamepadFamily glGamepadGetFamily() { return GamepadFamily::Unknown; }
+void glGamepadShutdown() {}
 
 bool glGamepadRumbleUpdateActive(int /*glfwGamepadIndex*/, const char* /*glfwGuid*/) {
     return false;

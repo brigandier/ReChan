@@ -2399,34 +2399,53 @@ pddiBaseShader* glDevice::NewShader(const char* type) {
 
 // glGamepad
 
+glGamepad::~glGamepad() { glGamepadShutdown(); }
+
 void glGamepad::Poll() {
+    const int previousJoystickId = activeJoystickId;
     connected = false;
+    family = GamepadFamily::Unknown;
     activeJoystickId = -1;
 
 #if defined(P3D_USE_VENDORED_SDL2)
     if (glGamepadPollState(buttons, axes)) {
         connected = true;
         activeJoystickId = GLFW_JOYSTICK_1;
+        family = glGamepadGetFamily();
         return;
     }
 #endif
 
+    bool newActivity = false;
     for (int jid = GLFW_JOYSTICK_1; jid <= GLFW_JOYSTICK_LAST; jid++) {
         if (!glfwJoystickIsGamepad(jid)) {
+            std::memset(previousButtons[jid], 0, sizeof(previousButtons[jid]));
+            std::memset(previousAxes[jid], 0, sizeof(previousAxes[jid]));
             continue;
         }
 
         GLFWgamepadstate state;
         if (glfwGetGamepadState(jid, &state)) {
-            connected = true;
-            activeJoystickId = jid;
+            bool activity = false;
             for (int b = 0; b < GamepadButton::COUNT; b++) {
-                buttons[b] = (state.buttons[b] == GLFW_PRESS);
+                const bool down = state.buttons[b] == GLFW_PRESS;
+                activity |= down && !previousButtons[jid][b];
+                previousButtons[jid][b] = down;
             }
             for (int a = 0; a < GamepadAxis::COUNT; a++) {
-                axes[a] = state.axes[a];
+                const float value = state.axes[a];
+                activity |= (a < 4 ? std::fabs(value) > 0.25f : value > -0.5f)
+                    && std::fabs(value - previousAxes[jid][a]) > 0.12f;
+                previousAxes[jid][a] = value;
             }
-            break;
+            if (!connected || (jid == previousJoystickId && !newActivity) || activity) {
+                connected = true;
+                activeJoystickId = jid;
+                std::memcpy(buttons, previousButtons[jid], sizeof(buttons));
+                std::memcpy(axes, state.axes, sizeof(axes));
+                family = GamepadFamilyFromMappingName(glfwGetGamepadName(jid));
+            }
+            newActivity |= activity;
         }
     }
 

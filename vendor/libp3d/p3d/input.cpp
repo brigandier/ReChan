@@ -3,6 +3,10 @@
 #include <cmath>
 #include <cstring>
 
+GamepadFamily PlatformInput::GetGamepadFamily() const {
+    return gamepadConnected && gamepad ? gamepad->GetFamily() : GamepadFamily::Unknown;
+}
+
 void PlatformInput::TrackKey(int key) {
     if (prevKeys.find(key) == prevKeys.end()) {
         prevKeys[key] = false;

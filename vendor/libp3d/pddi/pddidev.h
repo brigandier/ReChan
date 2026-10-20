@@ -2,6 +2,7 @@
 #pragma once
 
 #include "pddi/pddi.h"
+#include "pddi/gamepadfamily.h"
 #include <functional>
 #include <vector>
 
@@ -341,6 +342,7 @@ public:
 
 class pddiGamepad : public pddiObject {
 public:
+    virtual GamepadFamily GetFamily() const { return GamepadFamily::Unknown; }
     virtual void Poll() = 0;
     virtual bool IsConnected() const = 0;
     virtual bool IsButtonDown(int button) const = 0;
