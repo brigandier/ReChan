@@ -1,4 +1,5 @@
 #pragma once
+int AutoTest_VerifyLocalization(const char* outputDirectory);
 #include "gen/common.h"
 
 enum class GameState : s32;

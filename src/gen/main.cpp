@@ -203,6 +203,10 @@ int main(int argc, char** argv) {
         CrashReporter::TriggerTestCrash();
     }
 
+    if (argc >= 3 && std::strcmp(argv[1], "--test-localization") == 0) {
+        return AutoTest_VerifyLocalization(argv[2]);
+    }
+
     // Headless verification/export path used by automated round-trip checks
     // and mod authors who want the same output as the DebugUI button.
     if (argc >= 2 && std::strcmp(argv[1], "--export-assets") == 0) {

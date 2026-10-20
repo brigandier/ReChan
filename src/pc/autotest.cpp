@@ -1,4 +1,8 @@
 #include "pc/autotest.h"
+#include "pc/settings.h"
+#include "extra/customtext.h"
+#include "extra/controllerpromptstyle.h"
+#include "snd/sound.h"
 #include "ai/generator.h"
 #include "ai/player.h"
 #include "gen/ai.h"
@@ -11,11 +15,69 @@
 #include "pddi/pddidev.h"
 
 #include <cstdlib>
+#include <cstdio>
+#include <filesystem>
 #include <cstring>
 #include <string>
 #include <vector>
 
 #include "vendor/stb/stb_image_write.h"
+
+int AutoTest_VerifyLocalization(const char* outputDirectory) {
+    std::error_code ec;
+    std::filesystem::create_directories(outputDirectory, ec);
+    if (ec) return 1;
+    const auto path = std::filesystem::path(outputDirectory) / "localization-settings.ini";
+    Sound sound;
+    g_sound = &sound;
+    g_customText.Init();
+    for (s32 language = 0; language < NumLanguages; ++language) {
+        for (s32 style = 0; style < ControllerPromptStyle_Count; ++style) {
+            for (int enabled = 0; enabled <= 1; ++enabled) {
+                g_customText.SetLanguage((GameLanguage)language);
+                ControllerPromptManager::SetStyle(style);
+                g_settings.subtitlesEnabled = enabled != 0;
+                if (!g_customText.GetString("FE_LPOR") || !g_customText.GetString("FE_SUB")
+                    || !g_settings.Save(path.string().c_str())) return 2;
+                g_customText.SetLanguage(LangEnglish);
+                ControllerPromptManager::SetStyle(ControllerPromptStyle_Auto);
+                g_settings.subtitlesEnabled = !enabled;
+                if (!g_settings.Load(path.string().c_str())
+                    || g_customText.GetLanguage() != language
+                    || ControllerPromptManager::GetPreference() != style
+                    || g_settings.subtitlesEnabled != (enabled != 0)) return 3;
+            }
+        }
+    }
+    g_customText.SetLanguage(LangPortugueseBrazil);
+    const char* value = g_customText.GetString("FE_LPOR");
+    if (!value || std::strcmp(value, "Portugu\xc3\xaas (Brasil)") != 0) return 4;
+    g_customText.SetLanguage((GameLanguage)999);
+    if (g_customText.GetLanguage() != LangEnglish) return 5;
+    // An older settings file has no subtitle key or automatic-style value.
+    FILE* legacy = std::fopen(path.string().c_str(), "wb");
+    if (!legacy) return 6;
+    std::fputs("[general]\nlanguage = 5\n[controls]\nprompt_style = 1\n", legacy);
+    std::fclose(legacy);
+    g_settings.subtitlesEnabled = false;
+    if (!g_settings.Load(path.string().c_str()) || !g_settings.subtitlesEnabled
+        || ControllerPromptManager::GetPreference() != ControllerPromptStyle_Switch) return 7;
+    legacy = std::fopen(path.string().c_str(), "wb");
+    if (!legacy) return 8;
+    std::fputs("[general]\nlanguage = 5\n[controls]\nprompt_style = 0\n", legacy);
+    std::fclose(legacy);
+    if (!g_settings.Load(path.string().c_str())
+        || ControllerPromptManager::GetPreference() != ControllerPromptStyle_Default) return 9;
+    legacy = std::fopen(path.string().c_str(), "wb");
+    if (!legacy) return 10;
+    std::fclose(legacy);
+    g_settings.Load(path.string().c_str());
+    if (ControllerPromptManager::GetPreference() != ControllerPromptStyle_Auto
+        || !g_settings.subtitlesEnabled || g_customText.GetLanguage() != LangEnglish) return 11;
+    std::puts("PASS native catalog loading and settings round trips: 6 languages x 4 styles x 2 subtitle preferences");
+    g_customText.Shutdown();
+    return 0;
+}
 
 static bool s_enabled = false;
 static s32 s_levelIndex = 0;

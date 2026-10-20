@@ -72,6 +72,12 @@ def main():
         print(f'PASS {name}: all requested Portuguese accents')
     expanded = [(len(value), key) for key, value in pt.items() if len(value) > len(base[key])*1.4 and len(value) > 25]
     print('VISUAL REVIEW (length expansion, not failures):', sorted(expanded, reverse=True))
+    for name, dimensions in [('controller_overlay_playstation.png', (1024, 1024)), ('controller_sheet_playstation.png', (632, 1808))]:
+        data = (ROOT/'res/pc/textures/frontend'/name).read_bytes()
+        assert data[:8] == b'\x89PNG\r\n\x1a\n', name
+        assert struct.unpack_from('>II', data, 16) == dimensions, (name, 'atlas dimensions')
+        assert data[25] == 6, (name, 'RGBA transparency required')
+        print(f'PASS {name}: {dimensions}, RGBA')
 
 if __name__ == '__main__':
     main()

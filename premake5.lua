@@ -1,3 +1,5 @@
+newoption { trigger = "tests", description = "Build resource and controller tests without game data" }
+
 workspace "rechan"
     architecture "x86_64"
     configurations { "Debug", "Release", "ReleaseASan", "Shipping", "Headless" }
@@ -5,10 +7,45 @@ workspace "rechan"
     startproject "rechan"
 
     filter "system:windows"
-        toolset "v145"
+        toolset (_ACTION == "vs2022" and "v143" or "v145")
         -- Parallel translation units race on the shared compiler PDB (C1041).
         buildoptions { "/FS" }
     filter {}
+
+if _OPTIONS["tests"] then
+    project "support-tests"
+        kind "ConsoleApp"
+        language "C++"
+        cppdialect "C++20"
+        staticruntime "on"
+        runtime "Release"
+        targetdir "build/tests"
+        objdir "build/obj/tests/%{cfg.buildcfg}/support"
+        includedirs { "src", "vendor/libp3d" }
+        files { "tests/subtitles.cpp", "tests/promptstyle.cpp", "src/radmovie/subtitles.cpp" }
+        filter { "system:windows", "configurations:ReleaseASan" }
+            targetname "support-tests-asan"
+            buildoptions { "/fsanitize=address" }
+        filter {}
+
+    project "gamepad-tests"
+        kind "ConsoleApp"
+        language "C++"
+        cppdialect "C++20"
+        staticruntime "on"
+        runtime "Release"
+        targetdir "build/tests"
+        objdir "build/obj/tests/%{cfg.buildcfg}/gamepad"
+        includedirs { "vendor/libp3d", "vendor/libp3d/vendor/sdl2/include" }
+        defines { "SDL_MAIN_HANDLED", "SDL_STATIC" }
+        files { "tests/gamepad.cpp" }
+        links { "libp3d" }
+        filter "system:windows"
+            links { "opengl32", "cfgmgr32", "imm32", "setupapi", "version", "winmm" }
+        filter "system:linux"
+            links { "GL", "X11", "Xcursor", "Xi", "Xinerama", "Xrandr", "SDL2", "pthread", "dl", "m" }
+        filter {}
+end
 
 outputdir = "%{cfg.buildcfg}-%{cfg.system}-%{cfg.architecture}"
 
