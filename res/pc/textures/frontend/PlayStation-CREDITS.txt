@@ -1,0 +1,19 @@
+UI Elements: Mikkel Julian "Arks" Petersen (@ScissorMarks / ArksDigital).
+PS4 Buttons, copyright 2020.
+Source: https://arks.itch.io/ps4-buttons
+License: Creative Commons Attribution 4.0 International (CC BY 4.0).
+https://creativecommons.org/licenses/by/4.0/
+Adaptations: atlas arrangement supplied by danilotec1-prog; original dark
+face buttons, shoulder buttons, D-pad, analog and L3/R3 art retained.
+
+DualSense button geometry: PS5 Button Icons and Controls by Zacksly.
+Source: https://zacksly.itch.io/ps5-button-icons-and-controls
+License: Creative Commons Attribution 3.0 Unported (CC BY 3.0).
+https://creativecommons.org/licenses/by/3.0/
+Adaptations: Options/Create paths use a dark grey fill with light outlines;
+touchpad outline adapted to the same palette and dotted surface.
+Controller overlay: perspective adaptation of the supplied DualSense reference
+using image generation, with separately authored leader paths and menu positions.
+
+PlayStation and DualSense are trademarks of Sony Interactive Entertainment.
+No endorsement by the original artists or Sony is implied.

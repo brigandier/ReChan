@@ -9,6 +9,7 @@
 #include "pc/inputaction.h"
 #include "pc/tim.h"
 #include "p3d/texture.h"
+#include "pddi/pdditex.h"
 #include <cstdlib>
 #include <cstring>
 
@@ -744,6 +745,9 @@ private:
             path = builtPath;
         }
         sheet.tex = tTexture::LoadFromImagePath(path, &sheet.width, &sheet.height);
+        if (sheet.tex && sheet.tex->GetTexture()) {
+            sheet.tex->GetTexture()->SetFilterMode(PDDI_FILTER_BILINEAR);
+        }
         return sheet.tex != nullptr;
     }
 

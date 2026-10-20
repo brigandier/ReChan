@@ -3576,6 +3576,9 @@ void feCustomMenuMgr::LoadControllerOverlayTexture() {
     char path[128];
     ControllerPromptManager::BuildOverlayPath(path, (s32)sizeof(path));
     m_controllerTexture = tTexture::LoadFromImagePath(path);
+    if (m_controllerTexture && m_controllerTexture->GetTexture()) {
+        m_controllerTexture->GetTexture()->SetFilterMode(PDDI_FILTER_BILINEAR);
+    }
     if (!m_controllerTexture) {
         LOG("[CustomMenu] Failed to load %s", path);
     }
@@ -5989,11 +5992,34 @@ void feCustomMenuMgr::RenderControllerOverlay(s32 panelX, s32 panelY) const {
         { -1, "FE_CNU", 162.0f,  55.5f, TextAlign_Left },
     };
 
-    const bool useSwitchLabels = ControllerPromptManager::GetStyle() == (s32)ControllerPromptStyle_Switch;
+    ButtonLabel kButtonsPlayStation[] = {
+        { 0,  nullptr,  -68.0f,  5.0f,  TextAlign_Right },
+        { 2,  nullptr,  -68.0f, 11.0f,  TextAlign_Right },
+        { -1, "FE_CNU", -68.0f, 22.5f,  TextAlign_Right },
+        { -1, "FE_CMV", -68.0f, 32.5f,  TextAlign_Right },
+        { -1, "FE_CMV", -68.0f, 50.0f,  TextAlign_Right },
+
+        { 1,  nullptr,  68.0f,  5.0f,  TextAlign_Left },
+        { 3,  nullptr,  68.0f, 11.0f,  TextAlign_Left },
+        { -1, "FE_CMO", 68.0f, 17.5f,  TextAlign_Left },
+        { 4,  nullptr,  68.0f, 25.25f, TextAlign_Left },
+        { 5,  nullptr,  68.0f, 33.0f,  TextAlign_Left },
+        { 6,  nullptr,  68.0f, 40.5f,  TextAlign_Left },
+        { 7,  nullptr,  68.0f, 50.0f,  TextAlign_Left },
+        { -1, "FE_CNU", 68.0f, 58.0f,  TextAlign_Left },
+    };
+
+    const s32 style = ControllerPromptManager::GetStyle();
+    const bool useSwitchLabels = style == (s32)ControllerPromptStyle_Switch;
+    const bool usePlayStationLabels = style == (s32)ControllerPromptStyle_PlayStation;
     const ButtonLabel* buttons = useSwitchLabels ? kButtonsSwitch : kButtonsDefault;
-    const s32 buttonCount = useSwitchLabels
+    s32 buttonCount = useSwitchLabels
         ? (s32)(sizeof(kButtonsSwitch) / sizeof(kButtonsSwitch[0]))
         : (s32)(sizeof(kButtonsDefault) / sizeof(kButtonsDefault[0]));
+    if (usePlayStationLabels) {
+        buttons = kButtonsPlayStation;
+        buttonCount = (s32)(sizeof(kButtonsPlayStation) / sizeof(kButtonsPlayStation[0]));
+    }
 
     if (!g_textManager || !g_textManager->SetFontByName("Legal")) {
         return;
@@ -6031,7 +6057,8 @@ void feCustomMenuMgr::RenderControllerOverlay(s32 panelX, s32 panelY) const {
         }
 
         if (displayName[0] != '\0') {
-            const f32 labelScreenX = screenTexX + SCREEN_SCALE_X(btn.relX);
+            const f32 labelScreenX = screenTexX + (usePlayStationLabels
+                ? SCREEN_SCALE_Y(btn.relX) : SCREEN_SCALE_X(btn.relX));
             const f32 labelScreenY = screenTexY + SCREEN_SCALE_Y(btn.relY);
 
             g_textManager->SetAlignment(btn.alignment);

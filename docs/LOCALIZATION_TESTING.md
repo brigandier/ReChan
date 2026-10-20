@@ -17,7 +17,7 @@ em jogo. Não há imagem original ou recursos PSX extraídos neste ambiente.
 | 4 — Legendas | SRT nativo em `pc/subtitles/pt-BR`, seleção por idioma e nome do vídeo, fonte Legal existente, branco com contorno e sombra. Opção em Som. Novo parser pequeno, independente do renderizador, usa o relógio monotônico já utilizado pelo vídeo. | `src/radmovie/movieplayer.*`, `subtitles.*`, `src/pc/settings.*`, `fecustommenumgr.*`, `res/pc/subtitles/pt-BR/` | 117 blocos lidos; UTF-8 estrito, BOM/CRLF, quebras, intervalos semiabertos, sobreposição e entradas inválidas testados. Sem dependência de `~mods`; vídeos intocados. |
 | 5 — Controle ativo | Família exposta pela interface pddi existente; PS3/PS4/PS5 via SDL_GameControllerGetType. Poll mantém dispositivos abertos e acompanha nova atividade com limiar contra drift; fecha handles desconectados e interrompe vibração ao trocar de dispositivo. | `vendor/libp3d/pddi/gamepadfamily.h`, `pddidev.h`, `gl/glgamepadrumble_sdl.*`, `glrender.*`, `p3d/input.*` | Mesmos comandos normalizados e mesma API de vibração. Onze tipos virtuais e alternância entre dois dispositivos testados. Nenhuma atualização da SDL ou troca do GLFW. |
 | 6 — Estilos | Preferência salva separada do estilo resolvido. Menu: Automático, Xbox, PlayStation, Nintendo Switch. IDs persistidos: Xbox=0, Switch=1, PlayStation=2, Auto=3. Novas configurações usam Auto. Desconhecido usa Xbox no PC; manual prevalece. | `controllerpromptstyle.h`, `inputaction.cpp`, `settings.cpp`, `fecustommenumgr.cpp` | Precedência, IDs legados, ordem do menu, caminhos de recursos e persistência testados. Dispositivo virtual é tratado conforme a identidade exposta pela biblioteca, sem adivinhar o controle físico. |
-| 7 — Arte | Um estilo PlayStation baseado no DualSense, incluindo touchpad, Options, Share/Create, direcional, analógicos e símbolos. L/R originais e setas preservados; L3/R3 abaixo dos ícones de clique. Fontes SVG mantidas para revisão e rasterização precisa. | `res/art/controller_*_playstation.svg`, `res/pc/textures/frontend/controller_*_playstation.png`, `prompticons.h` | Overlay 1024x1024 e atlas 632x1808, RGBA; inspecionados visualmente. A geração raster de referência não preservava alinhamento; recursos finais usam fontes vetoriais determinísticas. Encaixe com rótulos e legibilidade em jogo pendentes. |
+| 7 — Arte | Um estilo PlayStation baseado no DualSense, incluindo touchpad, Options, Share/Create, direcional, analógicos e símbolos. Atlas com os botões PS4 escuros fornecidos pelo usuário. SVGs preservam a composição e as linhas editáveis sobre a referência raster. | `res/art/controller_*_playstation.svg`, `res/pc/textures/frontend/controller_*_playstation.png`, `prompticons.h` | Overlay 1024x1024 e atlas 632x1808, RGBA; inspecionados visualmente. Perspectiva levemente elevada, com linhas no padrão Xbox. Encaixe com rótulos e legibilidade em jogo pendentes. |
 | 8 — Integração | Testes independentes opcionais, teste nativo sem imagem de disco e ajuste da seleção de toolset no processo Premake oficial. | `tests/`, `scripts/run-support-tests.ps1`, `validate-localization.py`, `src/pc/autotest.*`, `src/gen/main.cpp`, `premake5.*` | Windows x64 Release compilado com VS 2022/v143. Parser e estilos também executados com AddressSanitizer sem diagnóstico. Linux e regressão de gameplay ainda não executados. |
 | 9 — Pacote | Pacote experimental local com executável, recursos PC, licença existente, avisos SDL/GLFW e relatórios de avaliação. | `scripts/pack-win64.ps1`, `shipping/rechan-win64-experimental.zip` | O empacotador copia somente `res/pc` como dados de jogo. Nenhum vídeo, ROM, imagem de disco ou recurso PSX extraído foi incluído. Continua exigindo a cópia original SLUS-00684, conforme o README oficial. |
 
@@ -90,3 +90,28 @@ testes/empacotamento. Uma contribuição externa precisará de revisão individu
 de escopo e das orientações atuais dos mantenedores: detecção/PlayStation,
 infraestrutura geral, PT-BR e legendas devem ser avaliados separadamente.
 Nenhuma contribuição externa foi aberta ou preparada como PR.
+
+## Revisão visual PlayStation
+
+O atlas passou a usar os botões escuros do conjunto PS4 fornecido pelo usuário,
+mantendo o mesmo conjunto único para PS3/PS4/PS5. Options, Create e touchpad
+seguem a geometria DualSense com preenchimento cinza escuro. Options ocupa a
+primeira célula de menu, correspondente a Start; Create ocupa a segunda,
+correspondente a Back. Os recortes continuam nos pontos esperados pelo jogo.
+Os créditos dos recursos de Arks e Zacksly acompanham os PNGs em
+`pc/textures/frontend/PlayStation-CREDITS.txt` e entram no pacote automaticamente.
+
+O overlay usa uma perspectiva levemente elevada do DualSense, mostrando a parte
+superior dos ombros e a profundidade dos analógicos. As linhas seguem o padrão
+Xbox: traço cinza de oito pixels, segmentos retos e somente as dobras de 90°
+necessárias. Create e Options apontam para os controles corretos; os símbolos
+continuam ligados às ações do mapeamento existente. A posição horizontal dos
+rótulos PlayStation usa a mesma escala uniforme da imagem, evitando deslocamento
+por proporção de tela. A conferência final em jogo permanece pendente.
+
+O carregamento do atlas de prompts (controle/teclado) e do overlay agora solicita
+filtragem bilinear. O backend OpenGL utilizava GL_NEAREST por padrão, causando
+degraus nas bordas ao reduzir os PNGs. A alteração fica nos recursos de interface;
+não muda o filtro das texturas de cenário nem a rasterização das fontes.
+Filtros não substituem a inspeção visual final em jogo, especialmente em reduções
+muito grandes e resoluções não inteiras.
