@@ -283,7 +283,6 @@ bool MoviePlayer::Open(const char* path) {
 
 void MoviePlayer::LoadSubtitles(const char* moviePath) {
     subtitles.Clear();
-    if (g_customText.GetLanguage() != LangPortugueseBrazil) return;
     std::string name(moviePath);
     const size_t slash = name.find_last_of("/\\");
     if (slash != std::string::npos) name.erase(0, slash + 1);
@@ -292,7 +291,7 @@ void MoviePlayer::LoadSubtitles(const char* moviePath) {
     for (char& c : name) if (c >= 'a' && c <= 'z') c = (char)(c - 'a' + 'A');
     if (name != "PROLOG" && name != "FACTORY" && name != "MAKING"
         && name != "VICTORY" && name != "CREDITS") return;
-    const std::string path = "pc/subtitles/pt-BR/" + name + ".srt";
+    const std::string path = std::string("pc/subtitles/") + g_customText.GetLanguageCode() + "/" + name + ".srt";
     u8* data = nullptr;
     u32 size = 0;
     if (!xcReadFileLow(path.c_str(), &data, &size)) return;

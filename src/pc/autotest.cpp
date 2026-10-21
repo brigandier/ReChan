@@ -13,10 +13,13 @@
 #include "gen/time.h"
 #include "p3d/context.h"
 #include "pddi/pddidev.h"
+#include "radmovie/subtitles.h"
 
 #include <cstdlib>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -31,7 +34,19 @@ int AutoTest_VerifyLocalization(const char* outputDirectory) {
     Sound sound;
     g_sound = &sound;
     g_customText.Init();
+    static const char* expectedCodes[] = { "en", "de", "fr", "it", "es", "pt-BR" };
     for (s32 language = 0; language < NumLanguages; ++language) {
+        g_customText.SetLanguage((GameLanguage)language);
+        if (std::strcmp(g_customText.GetLanguageCode(), expectedCodes[language]) != 0) return 12;
+        for (const char* movie : { "PROLOG", "FACTORY", "MAKING", "VICTORY", "CREDITS" }) {
+            const std::string subtitlePath = std::string("pc/subtitles/")
+                + g_customText.GetLanguageCode() + "/" + movie + ".srt";
+            std::ifstream input(subtitlePath, std::ios::binary);
+            if (!input) return 13;
+            const std::string contents((std::istreambuf_iterator<char>(input)), {});
+            MovieSubtitles subtitles;
+            if (!subtitles.Parse(contents)) return 14;
+        }
         for (s32 style = 0; style < ControllerPromptStyle_Count; ++style) {
             for (int enabled = 0; enabled <= 1; ++enabled) {
                 g_customText.SetLanguage((GameLanguage)language);
@@ -75,6 +90,7 @@ int AutoTest_VerifyLocalization(const char* outputDirectory) {
     if (ControllerPromptManager::GetPreference() != ControllerPromptStyle_Auto
         || !g_settings.subtitlesEnabled || g_customText.GetLanguage() != LangEnglish) return 11;
     std::puts("PASS native catalog loading and settings round trips: 6 languages x 4 styles x 2 subtitle preferences");
+    std::puts("PASS native subtitle language selection: 6 languages x 5 movies");
     g_customText.Shutdown();
     return 0;
 }

@@ -4,6 +4,12 @@
 
 CustomText g_customText;
 
+const char* CustomText::GetLanguageCode() const {
+    static constexpr const char* codes[] = { "en", "de", "fr", "it", "es", "pt-BR" };
+    static_assert(sizeof(codes) / sizeof(codes[0]) == NumLanguages);
+    return codes[(s32)lang >= 0 && (s32)lang < NumLanguages ? (s32)lang : LangEnglish];
+}
+
 // PSX: CustomText::Init
 void CustomText::Init() {
     ClearStrings();

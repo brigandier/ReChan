@@ -53,6 +53,8 @@ public:
     // Get current language
     GameLanguage GetLanguage() const { return lang; }
 
+    const char* GetLanguageCode() const;
+
     // Get current localization ID (for tracking if language changed)
     s32 GetLocalizationID() const { return localizationID; }
 

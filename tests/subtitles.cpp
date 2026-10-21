@@ -45,17 +45,19 @@ int main() {
     assert(!subtitles.Parse("broken"));
     assert(subtitles.Entries().empty());
 
-    for (const char* name : {"PROLOG", "FACTORY", "MAKING", "VICTORY", "CREDITS"}) {
-        std::ifstream input(std::string("res/pc/subtitles/pt-BR/") + name + ".srt", std::ios::binary);
-        assert(input);
-        std::string contents((std::istreambuf_iterator<char>(input)), {});
-        for (int repeat = 0; repeat < 100; ++repeat) {
-            assert(subtitles.Parse(contents));
-            assert(!subtitles.TextAt(subtitles.Entries().front().startSeconds).empty());
-            subtitles.Clear();
+    for (const char* locale : {"en", "de", "fr", "it", "es", "pt-BR"}) {
+        for (const char* name : {"PROLOG", "FACTORY", "MAKING", "VICTORY", "CREDITS"}) {
+            std::ifstream input(std::string("res/pc/subtitles/") + locale + "/" + name + ".srt", std::ios::binary);
+            assert(input);
+            std::string contents((std::istreambuf_iterator<char>(input)), {});
+            for (int repeat = 0; repeat < 100; ++repeat) {
+                assert(subtitles.Parse(contents));
+                assert(!subtitles.TextAt(subtitles.Entries().front().startSeconds).empty());
+                subtitles.Clear();
+            }
+            subtitles.Parse(contents);
+            std::cout << "PASS " << locale << "/" << name << ": " << subtitles.Entries().size() << " cues, 100 replays\n";
         }
-        subtitles.Parse(contents);
-        std::cout << "PASS " << name << ": " << subtitles.Entries().size() << " cues, 100 replays\n";
     }
     std::cout << "PASS SRT timing, UTF-8, invalid input, overlap, clear and render-rate independence\n";
 }

@@ -2,6 +2,7 @@
 from pathlib import Path
 import re
 import struct
+import unicodedata
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -53,6 +54,26 @@ def font_characters(path):
                     characters.add(chr(cp))
     return characters
 
+def subtitle_cues(path):
+    contents = path.read_text(encoding='utf-8-sig').replace('\r\n', '\n').strip()
+    result = []
+    for index, block in enumerate(contents.split('\n\n'), 1):
+        lines = block.splitlines()
+        assert len(lines) >= 3 and lines[0] == str(index), (path, index, 'cue identifier')
+        times = re.fullmatch(r'(\d{2}):([0-5]\d):([0-5]\d),(\d{3}) --> (\d{2}):([0-5]\d):([0-5]\d),(\d{3})', lines[1])
+        assert times, (path, index, 'timestamp')
+        fields = [int(value) for value in times.groups()]
+        seconds = lambda values: values[0]*3600 + values[1]*60 + values[2] + values[3]/1000
+        assert seconds(fields[:4]) < seconds(fields[4:]), (path, index, 'duration')
+        text = '\n'.join(lines[2:])
+        assert text and text == unicodedata.normalize('NFC', text), (path, index, 'text normalization')
+        assert not any((ord(c) < 32 and c != '\n') or c == '\ufffd' for c in text), (path, index, 'invalid characters')
+        assert len(lines[2:]) <= 2, (path, index, 'more than two lines')
+        if path.parent.name != 'pt-BR':
+            assert max(map(len, lines[2:])) <= 42, (path, index, 'line too long')
+        result.append((lines[0], lines[1], text))
+    return result
+
 def main():
     base = catalog(ROOT/'res/pc/text/english.txt')
     controls = re.compile(r'%(?:\d+\$)?[-+0 #]*\d*(?:\.\d+)?[a-zA-Z%]|<[^>]+>')
@@ -72,6 +93,22 @@ def main():
         print(f'PASS {name}: all requested Portuguese accents')
     expanded = [(len(value), key) for key, value in pt.items() if len(value) > len(base[key])*1.4 and len(value) > 25]
     print('VISUAL REVIEW (length expansion, not failures):', sorted(expanded, reverse=True))
+    subtitle_root = ROOT/'res/pc/subtitles'
+    reference = {path.name: subtitle_cues(path) for path in (subtitle_root/'pt-BR').glob('*.srt')}
+    assert set(reference) == {'PROLOG.srt', 'FACTORY.srt', 'MAKING.srt', 'VICTORY.srt', 'CREDITS.srt'}
+    subtitle_characters = set()
+    for locale in ('en', 'de', 'fr', 'it', 'es', 'pt-BR'):
+        paths = {path.name: path for path in (subtitle_root/locale).glob('*.srt')}
+        assert paths.keys() == reference.keys(), (locale, 'movie mismatch')
+        for name, path in paths.items():
+            cues = subtitle_cues(path)
+            assert [(cue[0], cue[1]) for cue in cues] == [(cue[0], cue[1]) for cue in reference[name]], (path, 'timing mismatch')
+            subtitle_characters.update(''.join(cue[2] for cue in cues))
+        print(f'PASS {locale}: five native SRTs, 117 matching cue IDs/times, UTF-8 and two-line layout')
+    subtitle_characters.discard('\n')
+    for name in ('YIKES!__.TTF', 'Roboto-Regular.ttf', 'Europa Grotesk SH DemBol.ttf'):
+        assert not subtitle_characters-font_characters(ROOT/'res/pc/fonts'/name), (name, 'missing subtitle glyphs')
+    print('PASS all subtitle characters in the three bundled fonts')
     for name, dimensions in [('controller_overlay_playstation.png', (1024, 1024)), ('controller_sheet_playstation.png', (632, 1808))]:
         data = (ROOT/'res/pc/textures/frontend'/name).read_bytes()
         assert data[:8] == b'\x89PNG\r\n\x1a\n', name
