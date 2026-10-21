@@ -62,13 +62,43 @@ struct PolledController {
 static std::vector<PolledController> g_polledControllers;
 static char g_activeGuid[64] = {};
 static bool g_sdlMainReady = false;
+static bool g_ledAttempted = false;
+static bool g_ledSucceeded = false;
+static bool g_ledOwned = false;
+static Uint8 g_ledRed = 0, g_ledGreen = 0, g_ledBlue = 0;
+static Uint32 g_ledLastAttempt = 0;
+
+static void SetPlayerIndicator(SDL_GameController* controller, int playerIndex) {
+#if SDL_VERSION_ATLEAST(2, 0, 12)
+    if (controller && SDL_GameControllerGetAttached(controller)
+        && SDL_GameControllerGetType(controller) == SDL_CONTROLLER_TYPE_PS5
+        && SDL_GameControllerGetPlayerIndex(controller) != playerIndex) {
+        SDL_GameControllerSetPlayerIndex(controller, playerIndex);
+    }
+#endif
+}
+
+static void UpdatePlayerIndicators() {
+    for (auto& device : g_polledControllers) {
+        if (device.controller != g_activeController) SetPlayerIndicator(device.controller, -1);
+    }
+    SetPlayerIndicator(g_activeController, 0);
+}
 
 static void CloseActiveController() {
+    SetPlayerIndicator(g_activeController, -1);
+#if SDL_VERSION_ATLEAST(2, 0, 14)
+    if (g_ledOwned && g_activeJoystick && SDL_JoystickGetAttached(g_activeJoystick)) {
+        SDL_JoystickSetLED(g_activeJoystick, 0, 64, 255);
+    }
+#endif
+    g_ledAttempted = g_ledSucceeded = g_ledOwned = false;
     if (g_activeController) {
         SDL_GameControllerRumble(g_activeController, 0, 0, 0);
         if (!g_activeControllerFromPoll) SDL_GameControllerClose(g_activeController);
     }
     else if (g_activeJoystickOpenedDirect && g_activeJoystick) {
+        SDL_JoystickRumble(g_activeJoystick, 0, 0, 0);
         SDL_JoystickClose(g_activeJoystick);
     }
 
@@ -136,6 +166,7 @@ static bool BindControllerAtIndex(int sdlIndex, const char* expectedGuid, bool r
     else {
         CopyGuid(g_activeGuid, (int)sizeof(g_activeGuid), sdlGuidString);
     }
+    UpdatePlayerIndicators();
     return true;
 }
 
@@ -172,6 +203,15 @@ static bool BindJoystickAtIndex(int sdlIndex, const char* expectedGuid, bool req
 static bool EnsureSDLGameControllerSubsystem() {
     if (!g_sdlMainReady) {
         SDL_SetMainReady();
+#ifdef SDL_HINT_JOYSTICK_HIDAPI_PS4_RUMBLE
+        SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_PS4_RUMBLE, "1");
+#endif
+#ifdef SDL_HINT_JOYSTICK_HIDAPI_PS5_RUMBLE
+        SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_PS5_RUMBLE, "1");
+#endif
+#ifdef SDL_HINT_JOYSTICK_HIDAPI_PS5_PLAYER_LED
+        SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_PS5_PLAYER_LED, "1");
+#endif
         g_sdlMainReady = true;
     }
 
@@ -283,6 +323,7 @@ bool glGamepadPollState(bool outButtons[15], float outAxes[6]) {
         g_activeJoystick = SDL_GameControllerGetJoystick(selected);
         GetJoystickGuidString(g_activeJoystick, g_activeGuid, (int)sizeof(g_activeGuid));
     }
+    UpdatePlayerIndicators();
 
     if (!g_activeController) {
         return false;
@@ -454,7 +495,31 @@ bool glGamepadRumbleSet(float lowFrequency, float highFrequency) {
     return g_activeJoystick && SDL_JoystickRumble(g_activeJoystick, lowAmp, highAmp, durationMs) == 0;
 }
 
+bool glGamepadSetLED(unsigned char red, unsigned char green, unsigned char blue) {
+#if SDL_VERSION_ATLEAST(2, 0, 14)
+    if (!g_activeJoystick || !SDL_JoystickGetAttached(g_activeJoystick)) return false;
+    const Uint32 now = SDL_GetTicks();
+    // SDL throttles identical LED reports for five seconds, including failed writes.
+    if (g_ledAttempted && red == g_ledRed && green == g_ledGreen && blue == g_ledBlue
+        && (g_ledSucceeded || now - g_ledLastAttempt < 5000)) return g_ledSucceeded;
+    g_ledAttempted = true;
+    g_ledLastAttempt = now;
+    g_ledRed = red;
+    g_ledGreen = green;
+    g_ledBlue = blue;
+    g_ledSucceeded = SDL_JoystickHasLED(g_activeJoystick)
+        && (g_activeController ? SDL_GameControllerSetLED(g_activeController, red, green, blue)
+                               : SDL_JoystickSetLED(g_activeJoystick, red, green, blue)) == 0;
+    g_ledOwned |= g_ledSucceeded;
+    return g_ledSucceeded;
 #else
+    return false;
+#endif
+}
+
+#else
+
+bool glGamepadSetLED(unsigned char, unsigned char, unsigned char) { return false; }
 
 GamepadFamily glGamepadGetFamily() { return GamepadFamily::Unknown; }
 void glGamepadShutdown() {}

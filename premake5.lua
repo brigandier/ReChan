@@ -22,7 +22,7 @@ if _OPTIONS["tests"] then
         targetdir "build/tests"
         objdir "build/obj/tests/%{cfg.buildcfg}/support"
         includedirs { "src", "vendor/libp3d" }
-        files { "tests/subtitles.cpp", "tests/promptstyle.cpp", "src/radmovie/subtitles.cpp" }
+        files { "tests/subtitles.cpp", "tests/promptstyle.cpp", "tests/controllerfeedback.cpp", "src/radmovie/subtitles.cpp" }
         filter { "system:windows", "configurations:ReleaseASan" }
             targetname "support-tests-asan"
             buildoptions { "/fsanitize=address" }

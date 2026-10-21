@@ -7,9 +7,11 @@
 #include <limits>
 
 void TestPromptStyles();
+void TestControllerFeedback();
 
 int main() {
     TestPromptStyles();
+    TestControllerFeedback();
     MovieSubtitles subtitles;
     assert(!subtitles.Parse(""));
     assert(!subtitles.Parse("not an SRT"));

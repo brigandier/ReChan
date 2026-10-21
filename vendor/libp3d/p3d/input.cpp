@@ -7,6 +7,10 @@ GamepadFamily PlatformInput::GetGamepadFamily() const {
     return gamepadConnected && gamepad ? gamepad->GetFamily() : GamepadFamily::Unknown;
 }
 
+bool PlatformInput::SetGamepadLED(u8 red, u8 green, u8 blue) {
+    return gamepadConnected && gamepad && gamepad->SetLED(red, green, blue);
+}
+
 void PlatformInput::TrackKey(int key) {
     if (prevKeys.find(key) == prevKeys.end()) {
         prevKeys[key] = false;

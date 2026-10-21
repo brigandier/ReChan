@@ -485,6 +485,7 @@ public:
     float GetAxis(int axis) const override;
     bool SupportsVibration() const override;
     bool SetVibration(float lowFrequency, float highFrequency) override;
+    bool SetLED(u8 red, u8 green, u8 blue) override;
 
 private:
     GamepadFamily family = GamepadFamily::Unknown;

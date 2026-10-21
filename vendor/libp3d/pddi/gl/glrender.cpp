@@ -2511,6 +2511,10 @@ bool glGamepad::SetVibration(float lowFrequency, float highFrequency) {
 #endif
 }
 
+bool glGamepad::SetLED(u8 red, u8 green, u8 blue) {
+    return connected && glGamepadSetLED(red, green, blue);
+}
+
 // Platform factory
 
 pddiDevice* pddiCreate() { return new glDevice(); }

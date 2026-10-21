@@ -349,6 +349,7 @@ public:
     virtual float GetAxis(int axis) const = 0;
     virtual bool SupportsVibration() const = 0;
     virtual bool SetVibration(float lowFrequency, float highFrequency) = 0;
+    virtual bool SetLED(u8, u8, u8) { return false; }
 };
 
 // pddiDevice - factory for all pddi objects

@@ -14,10 +14,12 @@
 #include "pc/crashreporter.h"
 #include "pc/debugui.h"
 #include "pc/inputaction.h"
+#include "pc/controllerfeedback.h"
 #include "pc/rechan_icon_embedded.h"
 #include "pc/shadersrc.h"
 #include "pc/textmgr.h"
 #include "gen/game.h"
+#include "gen/world.h"
 #include "gen/time.h"
 #include "gen/display.h"
 #include "snd/rsevent.h"
@@ -53,6 +55,18 @@
 
 static f32 sSavedMasterVolume = 1.0f;
 static bool sWindowedCaptureRequestedByClick = false;
+
+static void UpdateControllerLED(const Game& game) {
+    if (!p3d::input || p3d::input->GetGamepadFamily() != GamepadFamily::PlayStation) return;
+    const World* world = game.GetWorld();
+    const Player* player = Player::s_player;
+    const bool playing = game.GetState() == GameState::Play && world && player
+        && !world->IsCurrentLevelHub() && p3d::input->IsEnabled()
+        && (!g_feCustomMenuMgr || !g_feCustomMenuMgr->IsActive());
+    const auto color = ControllerHealthLED(playing, playing ? player->health : 0,
+        playing ? player->maxHealth : 0, Time::GetTimeInSeconds());
+    p3d::input->SetGamepadLED(color.red, color.green, color.blue);
+}
 
 static void TrySetPlatformWindowIcon() {
     if (!p3d::display) {
@@ -98,8 +112,11 @@ static bool OnWndProc(const pddiWndMessage& msg) {
             }
             else {
                 // Lost focus
-                if (p3d::input)
+                if (p3d::input) {
+                    if (p3d::input->GetGamepadFamily() == GamepadFamily::PlayStation)
+                        p3d::input->SetGamepadLED(0, 64, 255);
                     p3d::input->SetEnabled(false);
+                }
                 //if (AudioEngine::IsInitialized()) {
                 //    sSavedMasterVolume = AudioEngine::GetMasterVolume();
                 //    AudioEngine::SetMasterVolume(0.0f);
@@ -427,6 +444,7 @@ int main(int argc, char** argv) {
             rDoTaskList(&rMainTaskList, static_cast<u32>(rFrameCount60));
         }
 
+        UpdateControllerLED(game);
         jcsUpdateAmbience();
         jcsUpdateDialogCD();
 
