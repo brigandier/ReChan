@@ -2915,7 +2915,7 @@ void feCustomMenuMgr::ApplyValue(const Entry& e, s32 v) {
         SetShock(v);
         if (v) {
             // Menu feedback: full-strength pulse that survives high-FPS frame pacing.
-            SetActuator(0, 255, 60);
+            TestControllerVibration();
             UpdateActuator(0);
         }
         else {
@@ -5940,12 +5940,14 @@ void feCustomMenuMgr::RenderControllerOverlay(s32 panelX, s32 panelY) const {
         return;
     }
 
+    const s32 style = ControllerPromptManager::GetStyle();
+    const bool usePlayStationLabels = style == (s32)ControllerPromptStyle_PlayStation;
     const s32 texW = m_controllerTexture->GetWidth();
     const s32 texH = m_controllerTexture->GetHeight();
     const f32 screenTexH = SCREEN_SCALE_Y(128);
     const f32 screenTexW = (texH > 0) ? screenTexH * ((f32)texW / (f32)texH) : screenTexH;
     const f32 screenTexX = SCALE_AND_CENTER_X(DEFAULT_SCREEN_WIDTH / 2);
-    const f32 screenTexY = SCREEN_SCALE_Y(panelY + 32.0f);
+    const f32 screenTexY = SCREEN_SCALE_Y(panelY + 32.0f + (usePlayStationLabels ? 5.0f : 0.0f));
 
     ScreenDraw::DrawQuad(m_controllerTexture, screenTexX - screenTexW / 2, screenTexY, screenTexW, screenTexH,
                          0.0f, 0.0f, 1.0f, 1.0f, 255, 255, 255, 255);
@@ -6009,9 +6011,7 @@ void feCustomMenuMgr::RenderControllerOverlay(s32 panelX, s32 panelY) const {
         { -1, "FE_CNU", 68.0f, 58.0f,  TextAlign_Left },
     };
 
-    const s32 style = ControllerPromptManager::GetStyle();
     const bool useSwitchLabels = style == (s32)ControllerPromptStyle_Switch;
-    const bool usePlayStationLabels = style == (s32)ControllerPromptStyle_PlayStation;
     const ButtonLabel* buttons = useSwitchLabels ? kButtonsSwitch : kButtonsDefault;
     s32 buttonCount = useSwitchLabels
         ? (s32)(sizeof(kButtonsSwitch) / sizeof(kButtonsSwitch[0]))

@@ -12,7 +12,9 @@
 #include "gen/game.h"
 #include "gen/time.h"
 #include "p3d/context.h"
+#include "p3d/input.h"
 #include "pddi/pddidev.h"
+#include "pc/inputaction.h"
 #include "radmovie/subtitles.h"
 
 #include <cstdlib>
@@ -20,13 +22,63 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <memory>
 #include <cstring>
 #include <string>
 #include <vector>
 
 #include "vendor/stb/stb_image_write.h"
 
+static bool VerifyControllerVibration() {
+    struct TestPad : pddiGamepad {
+        bool connected = true;
+        int calls = 0;
+        float low = 0, high = 0;
+        void Poll() override {}
+        bool IsConnected() const override { return connected; }
+        bool IsButtonDown(int) const override { return false; }
+        float GetAxis(int axis) const override { return axis >= 4 ? -1.0f : 0.0f; }
+        bool SupportsVibration() const override { return true; }
+        bool SetVibration(float l, float h) override { ++calls; low = l; high = h; return true; }
+    } pad;
+    std::unique_ptr<pddiDevice> device(pddiCreate());
+    std::unique_ptr<pddiDisplay> display(device->NewDisplay());
+    PlatformInput input;
+    input.SetDisplay(display.get());
+    input.SetGamepad(&pad);
+    input.ServiceInput();
+    ActionInput desktop;
+    auto* savedInput = p3d::input;
+    auto* savedActions = g_actionInput;
+    const s32 savedShock = GetShock();
+    p3d::input = &input;
+    g_actionInput = &desktop;
+    SetShock(1);
+    SetActuator(0, 128, 15);
+    bool ok = pad.calls == 0;
+    TestControllerVibration();
+    ok &= pad.calls == 1 && pad.low == 1.0f && pad.high == 0.0f;
+    for (int i = 0; i < 61; ++i) UpdateActuator(0);
+    ok &= pad.low == 0.0f && pad.high == 0.0f;
+    SetShock(0);
+    int calls = pad.calls;
+    TestControllerVibration();
+    ok &= pad.calls == calls;
+    SetShock(1);
+    pad.connected = false;
+    input.ServiceInput();
+    TestControllerVibration();
+    ok &= pad.calls == calls;
+    ClearActuator();
+    SetShock(savedShock);
+    p3d::input = savedInput;
+    g_actionInput = savedActions;
+    return ok;
+}
+
 int AutoTest_VerifyLocalization(const char* outputDirectory) {
+    if (!VerifyControllerVibration()) return 15;
+    std::puts("PASS native vibration menu test: keyboard/mouse activation, expiry, disabled and disconnected");
     std::error_code ec;
     std::filesystem::create_directories(outputDirectory, ec);
     if (ec) return 1;

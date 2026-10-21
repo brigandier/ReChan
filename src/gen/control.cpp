@@ -423,12 +423,12 @@ static u8 g_actuatorMotor = 0;
 static u8 g_actuatorSpeed = 0;
 static s32 g_actuatorSkipNextUpdate = 0;
 
-static bool ApplyActuatorVibration(u8 motor, u8 speed) {
+static bool ApplyActuatorVibration(u8 motor, u8 speed, bool allowInactive = false) {
     if (!p3d::input) {
         return false;
     }
     
-    if (!g_actionInput->IsGamepadActive())
+    if (!allowInactive && (!g_actionInput || !g_actionInput->IsGamepadActive()))
         return false;
 
     f32 amplitude = (f32)speed / 255.0f;
@@ -478,7 +478,7 @@ s32 PadGetState(s32 port) {
 }
 
 // PSX: SetActuator (CONTROL.CPP:250, 0x8002D540)
-void SetActuator(u8 motor, u8 speed, u32 duration) {
+static void StartActuator(u8 motor, u8 speed, u32 duration, bool allowInactive) {
     g_actuatorMotor = motor;
     g_actuatorSpeed = speed;
     g_actuatorFramesRemaining = (s32)duration;
@@ -489,7 +489,17 @@ void SetActuator(u8 motor, u8 speed, u32 duration) {
     }
 
     g_actuatorSkipNextUpdate = 1;
-    (void)ApplyActuatorVibration(g_actuatorMotor, g_actuatorSpeed);
+    (void)ApplyActuatorVibration(g_actuatorMotor, g_actuatorSpeed, allowInactive);
+}
+
+void SetActuator(u8 motor, u8 speed, u32 duration) {
+    StartActuator(motor, speed, duration, false);
+}
+
+void TestControllerVibration() {
+    if (g_shockEnabled && p3d::input && p3d::input->IsGamepadConnected()) {
+        StartActuator(0, 255, 60, true);
+    }
 }
 
 // PSX: ClearActuator (CONTROL.CPP:242, 0x8002D52C)

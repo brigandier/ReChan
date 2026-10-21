@@ -182,6 +182,7 @@ void SetShock(s32 enabled);
 s32 GetShock();
 s32 IsDualShock();
 void SetActuator(u8 motor, u8 speed, u32 duration);
+void TestControllerVibration();
 void ClearActuator();
 void UpdateActuator(s32 param);
 
