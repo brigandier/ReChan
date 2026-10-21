@@ -1,5 +1,6 @@
 #pragma once
 #include "core.h"
+#include "gen/config.h"
 #include "radmovie/subtitles.h"
 
 class tTexture;
@@ -35,8 +36,11 @@ public:
     f32 GetFrameRate() const { return (f32)(1.0 / frameInterval); }
 
 private:
+#if defined(RECHAN_VISUAL_TESTS)
+    friend struct MovieSubtitleVisualTest;
+#endif
     void LoadSubtitles(const char* moviePath);
-    void RenderSubtitles() const;
+    void RenderSubtitles(double elapsedSeconds) const;
     MovieSubtitles subtitles;
 
     // STR sector parsing

@@ -1,5 +1,8 @@
 #pragma once
 int AutoTest_VerifyLocalization(const char* outputDirectory);
+#if defined(RECHAN_VISUAL_TESTS)
+int AutoTest_RenderMovieSubtitles(const char* movieDirectory, const char* outputDirectory);
+#endif
 #include "gen/common.h"
 
 enum class GameState : s32;

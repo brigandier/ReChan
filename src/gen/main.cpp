@@ -345,6 +345,18 @@ int main(int argc, char** argv) {
         }
     }
 
+#if defined(RECHAN_VISUAL_TESTS)
+    if (argc >= 4 && std::strcmp(argv[1], "--test-movie-subtitles") == 0) {
+        const int result = AutoTest_RenderMovieSubtitles(argv[2], argv[3]);
+        g_textManager->Shutdown();
+        delete g_textManager;
+        g_textManager = nullptr;
+        platform->DestroyContext(ctx);
+        tPlatform::Destroy();
+        return result;
+    }
+#endif
+
     game.Open();
 
     if (AutoTest_IsEnabled() && g_time) {

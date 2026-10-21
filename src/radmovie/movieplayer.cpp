@@ -301,22 +301,23 @@ void MoviePlayer::LoadSubtitles(const char* moviePath) {
     delete[] data;
 }
 
-void MoviePlayer::RenderSubtitles() const {
+void MoviePlayer::RenderSubtitles(double elapsedSeconds) const {
     if (!g_settings.subtitlesEnabled || !g_textManager || !videoTexture || finished) return;
-    const std::string text = subtitles.TextAt(MovieSyncElapsedSeconds(this));
+    const std::string text = subtitles.TextAt(elapsedSeconds);
     if (text.empty()) return;
 
     ScreenDraw::Batch batch;
     g_textManager->PushState();
-    if (g_textManager->SetFontByName("Legal")) {
-        g_textManager->SetScale(SCREEN_SCALE_Y(0.48f));
+    if (g_textManager->SetFontByName("Menu") || g_textManager->SetFontByName("Legal")) {
+        g_textManager->SetScale(SCREEN_SCALE_Y(0.35f));
         g_textManager->SetWrapWidth(SCREEN_SCALE_X(DEFAULT_SCREEN_WIDTH * 0.88f));
         g_textManager->SetLineSpacing((s32)SCREEN_SCALE_Y(2.0f));
         g_textManager->SetAlignment(TextAlign_Center);
-        g_textManager->SetColor(255, 255, 255);
+        g_textManager->SetColor(215, 135, 0);
         g_textManager->SetPromptsEnabled(false);
-        g_textManager->SetShadow(true, SCREEN_SCALE_Y(1.0f), SCREEN_SCALE_Y(1.0f));
-        g_textManager->SetOutline(true, SCREEN_SCALE_Y(1.0f));
+        g_textManager->SetShadow(false);
+        // Outline thickness is already expressed in framebuffer pixels.
+        g_textManager->SetOutline(true, SCREEN_HEIGHT / 1080.0f, 0, 0, 0, 255);
         const TextBounds bounds = g_textManager->MeasureString(Utf8TextView(text));
         g_textManager->PrintString(Utf8TextView(text), SCALE_AND_CENTER_X(DEFAULT_SCREEN_WIDTH * 0.5f),
             SCREEN_HEIGHT - SCREEN_SCALE_Y(18.0f) - bounds.height);
@@ -741,7 +742,7 @@ void MoviePlayer::Render() {
                 true);
         }
     }
-    RenderSubtitles();
+    RenderSubtitles(MovieSyncElapsedSeconds(this));
 }
 
 // BitReader

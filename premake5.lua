@@ -68,6 +68,11 @@ project "rechan"
         "vendor/cgltf/cgltf.h",
     }
 
+    if _OPTIONS["tests"] then
+        defines { "RECHAN_VISUAL_TESTS" }
+        files { "tests/movievisual.cpp" }
+    end
+
     filter "system:windows"
         files { "src/pc/rechan.rc" }
     filter {}
