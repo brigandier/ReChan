@@ -30,11 +30,6 @@ $Notices = Join-Path $Stage 'licenses'
 New-Item -ItemType Directory -Force $Notices | Out-Null
 Copy-Item (Join-Path $Root 'vendor/libp3d/vendor/sdl2/LICENSE.txt') (Join-Path $Notices 'SDL2.txt')
 Copy-Item (Join-Path $Root 'vendor/libp3d/vendor/glfw/LICENSE.md') (Join-Path $Notices 'GLFW.md')
-if ($Experimental) {
-    $Reports = Join-Path $Stage 'evaluation'
-    New-Item -ItemType Directory -Force $Reports | Out-Null
-    Copy-Item (Join-Path $Root 'docs/PTBR_EDITORIAL.md'), (Join-Path $Root 'docs/PTBR_SUBTITLES.md'), (Join-Path $Root 'docs/LOCALIZATION_TESTING.md') $Reports
-}
 
 if (Test-Path -LiteralPath $OutZip) { Remove-Item -LiteralPath $OutZip }
 Compress-Archive -Path "$Stage\*" -DestinationPath $OutZip
