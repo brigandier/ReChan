@@ -5993,19 +5993,19 @@ void feCustomMenuMgr::RenderControllerOverlay(s32 panelX, s32 panelY) const {
     };
 
     ButtonLabel kButtonsPlayStation[] = {
-        { 0,  nullptr,  -68.0f,  5.0f,  TextAlign_Right },
-        { 2,  nullptr,  -68.0f, 11.0f,  TextAlign_Right },
-        { -1, "FE_CNU", -68.0f, 22.5f,  TextAlign_Right },
-        { -1, "FE_CMV", -68.0f, 32.5f,  TextAlign_Right },
-        { -1, "FE_CMV", -68.0f, 50.0f,  TextAlign_Right },
+        { 0,  nullptr,  -68.0f, -1.0f,  TextAlign_Right },
+        { 2,  nullptr,  -68.0f,  6.0f,  TextAlign_Right },
+        { -1, "FE_CNU", -68.0f, 17.5f,  TextAlign_Right },
+        { -1, "FE_CMV", -68.0f, 33.0f,  TextAlign_Right },
+        { -1, "FE_CMV", -68.0f, 58.0f,  TextAlign_Right },
 
-        { 1,  nullptr,  68.0f,  5.0f,  TextAlign_Left },
-        { 3,  nullptr,  68.0f, 11.0f,  TextAlign_Left },
+        { 1,  nullptr,  68.0f, -1.0f,  TextAlign_Left },
+        { 3,  nullptr,  68.0f,  6.0f,  TextAlign_Left },
         { -1, "FE_CMO", 68.0f, 17.5f,  TextAlign_Left },
-        { 4,  nullptr,  68.0f, 25.25f, TextAlign_Left },
+        { 4,  nullptr,  68.0f, 25.0f,  TextAlign_Left },
         { 5,  nullptr,  68.0f, 33.0f,  TextAlign_Left },
-        { 6,  nullptr,  68.0f, 40.5f,  TextAlign_Left },
-        { 7,  nullptr,  68.0f, 50.0f,  TextAlign_Left },
+        { 6,  nullptr,  68.0f, 41.0f,  TextAlign_Left },
+        { 7,  nullptr,  68.0f, 49.0f,  TextAlign_Left },
         { -1, "FE_CNU", 68.0f, 58.0f,  TextAlign_Left },
     };
 
