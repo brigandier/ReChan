@@ -148,6 +148,9 @@ Italienisch
 [FE_LSPA]
 Spanisch
 
+[FE_LPOR]
+Português (Brasil)
+
 [FE_CTL]
 Controller-Einstellungen
 
@@ -177,6 +180,9 @@ Xbox
 
 [FE_NX]
 Nintendo Switch
+
+[FE_PS]
+PlayStation
 
 [FE_CSD]
 STATUSANZEIGE
@@ -396,6 +402,9 @@ Musiklautstaerke:
 
 [FE_VCV]
 Sprachlautstaerke:
+
+[FE_SUB]
+Untertitel:
 
 [FE_STR]
 Stereo:
@@ -640,12 +649,3 @@ Spiegelwelt:
 
 [0xC131692D]
 Druecke <ACT:OPEN_CLOSE_MENU>, um das Hauptmenue zu oeffnen.
-
-[FE_LPOR]
-Português (Brasil)
-
-[FE_PS]
-PlayStation
-
-[FE_SUB]
-Untertitel:

@@ -30,3 +30,4 @@ minidumps/
 scripts/autotest-baseline/
 scripts/build-local.bat
 scripts/build-local.ps1
+__pycache__/
