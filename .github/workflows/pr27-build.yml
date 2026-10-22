@@ -45,6 +45,28 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Release build failed' }
           if (-not (Test-Path -LiteralPath 'bin/rechan.exe')) { throw 'rechan.exe was not produced' }
 
+      - name: Verify executable version metadata
+        shell: pwsh
+        run: |
+          $info = (Get-Item -LiteralPath 'bin/rechan.exe').VersionInfo
+          $expected = @{
+            CompanyName = 'SilverwireGames and contributors'
+            FileDescription = 'ReChan - Jackie Chan: Stuntmaster (PC)'
+            FileVersion = '2026.10.22.27'
+            OriginalFilename = 'rechan.exe'
+            ProductName = 'ReChan'
+            ProductVersion = '2026.10.22.27 (experimental PR #27)'
+            LegalCopyright = 'Copyright (c) 2026 _AG'
+          }
+          foreach ($key in $expected.Keys) {
+            $actual = $info.$key
+            if ($actual -ne $expected[$key]) {
+              throw "Invalid EXE metadata [$key]: expected '$($expected[$key])', got '$actual'"
+            }
+          }
+          if ($info.Language -notmatch 'Portug') { throw "Invalid language metadata: $($info.Language)" }
+          Write-Host "Executable version resource OK: $($info.FileDescription) / $($info.FileVersion) / $($info.Language)"
+
       - name: Validate locale resources
         shell: pwsh
         run: |
