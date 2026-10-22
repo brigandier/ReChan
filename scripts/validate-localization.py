@@ -1,10 +1,21 @@
-"""Validate shipped catalogs and subtitle resources without original game data."""
+"""Validate shipped catalogs and subtitle resources without original game data.
+
+Add new identifiers to their respective categories in every catalog, not to the
+end of the file. The English catalog defines the canonical sequence.
+"""
 from pathlib import Path
 import re
 import struct
 import unicodedata
 
 ROOT = Path(__file__).resolve().parents[1]
+
+def validate_order(reference, entries, path):
+    """Keep new tokens in their menu category; english.txt defines the order."""
+    assert entries.keys() == reference.keys(), (path, 'token mismatch', entries.keys() ^ reference.keys())
+    for position, (expected, actual) in enumerate(zip(reference, entries), 1):
+        assert expected == actual, (path, 'token order mismatch at position', position,
+                                    'expected', expected, 'got', actual)
 
 def catalog(path):
     result = {}
@@ -79,7 +90,7 @@ def main():
     controls = re.compile(r'%(?:\d+\$)?[-+0 #]*\d*(?:\.\d+)?[a-zA-Z%]|<[^>]+>')
     for path in sorted((ROOT/'res/pc/text').glob('*.txt')):
         entries = catalog(path)
-        assert entries.keys() == base.keys(), (path, 'token mismatch', entries.keys() ^ base.keys())
+        validate_order(base, entries, path)
         for key, text in entries.items():
             assert controls.findall(text) == controls.findall(base[key]), (path, key, 'format mismatch')
             assert not any(ord(c) < 32 or c == '\ufffd' for c in text), (path, key, 'invalid characters')

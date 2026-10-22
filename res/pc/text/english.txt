@@ -148,6 +148,9 @@ Italian
 [FE_LSPA]
 Spanish
 
+[FE_LPOR]
+Português (Brasil)
+
 [FE_CTL]
 Controller Settings
 
@@ -177,6 +180,9 @@ Xbox
 
 [FE_NX]
 Nintendo Switch
+
+[FE_PS]
+PlayStation
 
 [FE_CSD]
 STATUS DISPLAY
@@ -396,6 +402,9 @@ Music Volume:
 
 [FE_VCV]
 Voice Volume:
+
+[FE_SUB]
+Subtitles:
 
 [FE_STR]
 Stereo:
@@ -640,12 +649,3 @@ Mirror World:
 
 [0xC131692D]
 Press <ACT:OPEN_CLOSE_MENU> to open the main menu.
-
-[FE_LPOR]
-Português (Brasil)
-
-[FE_PS]
-PlayStation
-
-[FE_SUB]
-Subtitles:
