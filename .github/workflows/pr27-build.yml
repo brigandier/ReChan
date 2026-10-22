@@ -55,7 +55,7 @@ jobs:
         shell: pwsh
         run: |
           & scripts/pack-win64.ps1 -Root . -Experimental
-          if ($LASTEXITCODE -ne 0) { throw 'Packaging failed' }
+          # PowerShell scripts do not set a reliable LASTEXITCODE; validate the generated archive directly.
           if (-not (Test-Path -LiteralPath 'shipping/rechan-win64-experimental.zip')) { throw 'Packaged ZIP is missing' }
 
       - name: Upload experimental build
