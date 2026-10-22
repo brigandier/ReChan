@@ -223,6 +223,11 @@ int main(int argc, char** argv) {
     if (argc >= 3 && std::strcmp(argv[1], "--test-localization") == 0) {
         return AutoTest_VerifyLocalization(argv[2]);
     }
+#if defined(RECHAN_VISUAL_TESTS)
+    if (argc >= 3 && std::strcmp(argv[1], "--test-engine-integration") == 0) {
+        return AutoTest_VerifyEngineIntegration(argv[2]);
+    }
+#endif
 
     // Headless verification/export path used by automated round-trip checks
     // and mod authors who want the same output as the DebugUI button.

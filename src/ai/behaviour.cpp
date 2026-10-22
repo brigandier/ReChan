@@ -780,6 +780,11 @@ void Behaviour::GrontarDMS(Behaviour* self) {
     };
 
     if (!self->InActiveZone()) {
+        if (!owner->activeZone) {
+            owner->RequestAction(1);
+            resetComboState();
+            return;
+        }
         if (distanceToPlayer < GRONTAR_CLOSE_ATTACK_DIST
             && !IsPlayerAggressiveCombatState(player->actionState)) {
             const s32 playerInField = IsPointInFieldOf(player->pos, owner->pos, owner->orientation.y, 0x2AAA, 0x2AAA);

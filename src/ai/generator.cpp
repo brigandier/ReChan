@@ -402,9 +402,16 @@ void EnemyGenerator::AnalyzeMesh(DBRoot* root) {
         field176++;
     }
 
-    encounterZone = (g_ai && activeZoneHash != 0)
+    ActiveZone* zone = (g_ai && activeZoneHash != 0)
         ? static_cast<ActiveZone*>(g_ai->activeZoneList.FindNodeCRC(activeZoneHash, nullptr))
         : nullptr;
+    if (encounterPopulationTracked && encounterZone != zone) {
+        if (IsActiveZoneStillRegistered(encounterZone))
+            encounterZone->RemovePendingEnemySpawns(this, encounterSpawnsRemaining);
+        encounterSpawnsRemaining = 0;
+        encounterPopulationTracked = false;
+    }
+    encounterZone = zone;
     if (field200 > 0 && encounterZone && IsActiveZoneStillRegistered(encounterZone)) {
         if (!encounterPopulationTracked) {
             encounterPopulationTracked = true;

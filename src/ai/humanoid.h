@@ -435,6 +435,7 @@ public:
     bool pcDestroying = false;
     bool encounterPopulationRegistered = false;
     bool encounterPopulationResolved = false;
+    ActiveZone* encounterZone = nullptr;
     void RegisterEncounterPopulation();
     void ResolveEncounterPopulation();
     void UnregisterEncounterPopulation();

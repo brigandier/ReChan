@@ -1,6 +1,8 @@
 #pragma once
 #include "gen/cclist.h"
 #include "ai/simplbox.h"
+#include <unordered_map>
+#include <unordered_set>
 
 class Humanoid;
 class EnemyGenerator;
@@ -78,4 +80,7 @@ public:
     s32 DoActionsAtNode(LinearPath* path, s32 nodeIndex, Humanoid* humanoid);
     bool IsPathNodeTerminator(LinearPath* path, s32 nodeIndex) const;
     bool AllowBreakoffOfDestinationNode(LinearPath* path, s32 nodeIndex) const;
+private:
+    std::unordered_set<const Humanoid*> encounterMembers;
+    std::unordered_map<const EnemyGenerator*, s32> pendingGenerators;
 };

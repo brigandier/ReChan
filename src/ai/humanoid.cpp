@@ -1973,18 +1973,21 @@ void Humanoid::CreateModel(const char* name) {
 
 // PC: Bookkeeping for authored and generated encounter members.
 void Humanoid::RegisterEncounterPopulation() {
-    if (thingType == AITypes::TT_PLAYER || field452 == 0 || !activeZone ||
-        !IsActiveZoneStillRegistered(activeZone)) {
-        return;
+    ActiveZone* zone = (thingType != AITypes::TT_PLAYER && field452 != 0
+        && IsActiveZoneStillRegistered(activeZone)) ? activeZone : nullptr;
+    if (encounterZone != zone) {
+        UnregisterEncounterPopulation();
+        encounterZone = zone;
     }
+    if (!zone) return;
 
     if (!encounterPopulationRegistered) {
-        activeZone->RegisterEncounterHumanoid(this);
+        encounterZone->RegisterEncounterHumanoid(this);
         encounterPopulationRegistered = true;
         encounterPopulationResolved = false;
     }
     else if (encounterPopulationResolved) {
-        activeZone->RegisterEncounterHumanoid(this);
+        encounterZone->RegisterEncounterHumanoid(this);
         encounterPopulationResolved = false;
     }
 }
@@ -1994,8 +1997,8 @@ void Humanoid::ResolveEncounterPopulation() {
         return;
     }
 
-    if (activeZone && IsActiveZoneStillRegistered(activeZone)) {
-        activeZone->ResolveEncounterHumanoid(this);
+    if (IsActiveZoneStillRegistered(encounterZone)) {
+        encounterZone->ResolveEncounterHumanoid(this);
     }
     encounterPopulationResolved = true;
 }
@@ -2007,6 +2010,7 @@ void Humanoid::UnregisterEncounterPopulation() {
 
     ResolveEncounterPopulation();
     encounterPopulationRegistered = false;
+    encounterZone = nullptr;
 }
 
 // PSX: the zone-member and Behaviour part of CreateModel__8HumanoidPCc (0x800632B4).

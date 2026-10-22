@@ -778,13 +778,13 @@ static bool ReadWavPCM16(const std::string& path, std::vector<s16>& outPcm, u32&
     u32 dataSize = 0;
     bool haveFmt = false;
 
-    u32 pos = 12;
+    size_t pos = 12;
     while (pos + 8 <= data.size()) {
         const u8* chunkId = data.data() + pos;
         u32 chunkSize;
         memcpy(&chunkSize, data.data() + pos + 4, 4);
-        const u32 chunkStart = pos + 8;
-        if (chunkStart + chunkSize > data.size()) break;
+        const size_t chunkStart = pos + 8;
+        if (chunkSize > data.size() - chunkStart) return false;
 
         if (memcmp(chunkId, "fmt ", 4) == 0 && chunkSize >= 16) {
             memcpy(&audioFormat, data.data() + chunkStart + 0, 2);
@@ -801,7 +801,9 @@ static bool ReadWavPCM16(const std::string& path, std::vector<s16>& outPcm, u32&
         pos = chunkStart + chunkSize + (chunkSize & 1); // chunks are word-aligned
     }
 
-    if (!haveFmt || !dataChunk || audioFormat != 1 || bitsPerSample != 16 || numChannels == 0) {
+    if (!haveFmt || !dataChunk || audioFormat != 1 || bitsPerSample != 16
+        || (numChannels != 1 && numChannels != 2) || sampleRate == 0
+        || dataSize % (numChannels * sizeof(s16)) != 0) {
         return false;
     }
 
