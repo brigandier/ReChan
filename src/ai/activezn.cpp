@@ -1,6 +1,7 @@
 #include "ai/activezn.h"
 #include "pc/autotest.h"
 #include "ai/behaviour.h"
+#include "ai/generator.h"
 #include "ai/humanoid.h"
 #include "ai/player.h"
 #include "ai/thing.h"
@@ -8,6 +9,7 @@
 #include "gen/database.h"
 #include "gen/path.h"
 #include "p3d/p3dmath.h"
+#include <algorithm>
 
 // SubZoneVolume
 
@@ -85,6 +87,8 @@ void ActiveZone::AddSubZoneVolume(SubZoneVolume* szv) {
 
 // PSX: AddHumanoidToOverlordMembers__10ActiveZoneP8Humanoid (ACTIVEZN.CPP:390)
 void ActiveZone::AddHumanoidToOverlordMembers(Humanoid* h) {
+    if (!h) return;
+    for (const auto* member : members) if (member == h) return;
     if (AutoTest_TraceSpawns()) {
         LOG_ALWAYS("[Spawn] zone 0x%08X add member %p (count %u)", nameCRC, (void*)h, (u32)memberCount);
     }
@@ -111,6 +115,35 @@ void ActiveZone::RemoveHumanoidFromOverlordMembers(Humanoid* h) {
             return;
         }
     }
+}
+
+void ActiveZone::RegisterEncounterHumanoid(const Humanoid* humanoid) {
+    if (humanoid && encounterMembers.insert(humanoid).second) ++encounterHumanoidsRemaining;
+}
+
+void ActiveZone::ResolveEncounterHumanoid(const Humanoid* humanoid) {
+    if (encounterMembers.erase(humanoid)) --encounterHumanoidsRemaining;
+}
+
+void ActiveZone::RegisterPendingEnemySpawns(const EnemyGenerator* generator, s32 count) {
+    if (!generator || count <= 0) {
+        return;
+    }
+    pendingEnemySpawns += count;
+    pendingGenerators[generator] += count;
+}
+
+void ActiveZone::ResolvePendingEnemySpawn(const EnemyGenerator* generator) {
+    RemovePendingEnemySpawns(generator, 1);
+}
+
+void ActiveZone::RemovePendingEnemySpawns(const EnemyGenerator* generator, s32 count) {
+    const auto it = pendingGenerators.find(generator);
+    if (count <= 0 || it == pendingGenerators.end()) return;
+    const s32 removed = std::min(count, it->second);
+    pendingEnemySpawns -= removed;
+    it->second -= removed;
+    if (!it->second) pendingGenerators.erase(it);
 }
 
 // PSX: GetNumberOfThinkingMembers__10ActiveZone (ACTIVEZN.CPP:433, 0x800A6E30)

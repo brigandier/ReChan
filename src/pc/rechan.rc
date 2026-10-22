@@ -1,1 +1,36 @@
+#include <winver.h>
+#include "../extra/versionnumber.h"
+
 GLFW_ICON ICON "rechan.ico"
+
+LANGUAGE 0x16, 0x01
+
+1 VERSIONINFO
+ FILEVERSION RECHAN_FILE_VERSION
+ PRODUCTVERSION RECHAN_FILE_VERSION
+ FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
+ FILEFLAGS VS_FF_PRERELEASE | VS_FF_PRIVATEBUILD
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_APP
+ FILESUBTYPE VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "041604B0"
+        BEGIN
+            VALUE "CompanyName", "SilverwireGames and contributors\0"
+            VALUE "FileDescription", "ReChan - Jackie Chan: Stuntmaster (PC)\0"
+            VALUE "FileVersion", RECHAN_FILE_VERSION_STRING "\0"
+            VALUE "InternalName", "rechan\0"
+            VALUE "LegalCopyright", "Copyright (c) 2026 _AG\0"
+            VALUE "OriginalFilename", "rechan.exe\0"
+            VALUE "ProductName", "ReChan\0"
+            VALUE "ProductVersion", RECHAN_VERSION_STRING " (experimental)\0"
+            VALUE "PrivateBuild", "Experimental integration build\0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0416, 1200
+    END
+END

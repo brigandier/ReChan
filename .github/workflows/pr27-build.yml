@@ -1,0 +1,74 @@
+name: ReChan PR27 Windows build
+
+on:
+  push:
+    branches: [pr27-integration-test]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-2022
+    timeout-minutes: 45
+    steps:
+      - name: Checkout test revision
+        uses: actions/checkout@v4
+
+      - name: Configure MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Download Premake 5.0.0
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $url = 'https://github.com/premake/premake-core/releases/download/v5.0.0/premake-5.0.0-windows.zip'
+          $archive = Join-Path $env:RUNNER_TEMP 'premake.zip'
+          $out = Join-Path $env:RUNNER_TEMP 'premake'
+          Invoke-WebRequest -Uri $url -OutFile $archive
+          Expand-Archive -LiteralPath $archive -DestinationPath $out -Force
+          $exe = Join-Path $out 'premake5.exe'
+          if (-not (Test-Path -LiteralPath $exe)) { throw 'Premake binary missing in archive' }
+          "$out" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
+      - name: Generate Visual Studio solution
+        shell: pwsh
+        run: |
+          premake5 vs2022
+          if ($LASTEXITCODE -ne 0) { throw 'Premake generation failed' }
+
+      - name: Compile Release x64
+        shell: pwsh
+        run: |
+          msbuild build/rechan.sln -m -p:Configuration=Release -p:Platform=x64 -t:rechan -verbosity:minimal
+          if ($LASTEXITCODE -ne 0) { throw 'Release build failed' }
+          if (-not (Test-Path -LiteralPath 'bin/rechan.exe')) { throw 'rechan.exe was not produced' }
+
+      - name: Verify executable version metadata
+        shell: pwsh
+        run: |
+          & scripts/verify-win-version.ps1
+
+      - name: Validate locale resources
+        shell: pwsh
+        run: |
+          python scripts/validate-localization.py
+          if ($LASTEXITCODE -ne 0) { throw 'Locale validation failed' }
+          python -m unittest discover -s tests -p test_localization.py
+          if ($LASTEXITCODE -ne 0) { throw 'Catalog ordering regression tests failed' }
+
+      - name: Pack experimental Windows build
+        shell: pwsh
+        run: |
+          & scripts/pack-win64.ps1 -Root . -Experimental
+          # PowerShell scripts do not set a reliable LASTEXITCODE; validate the generated archive directly.
+          if (-not (Test-Path -LiteralPath 'shipping/rechan-win64-experimental.zip')) { throw 'Packaged ZIP is missing' }
+
+      - name: Upload experimental build
+        uses: actions/upload-artifact@v4
+        with:
+          name: rechan-pr27-win64
+          path: shipping/rechan-win64-experimental.zip
+          if-no-files-found: error
+          retention-days: 14

@@ -70,7 +70,7 @@ project "rechan"
 
     if _OPTIONS["tests"] then
         defines { "RECHAN_VISUAL_TESTS" }
-        files { "tests/movievisual.cpp" }
+        files { "tests/movievisual.cpp", "tests/printegration.cpp" }
     end
 
     filter "system:windows"
