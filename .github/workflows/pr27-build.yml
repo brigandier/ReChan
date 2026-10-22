@@ -48,30 +48,15 @@ jobs:
       - name: Verify executable version metadata
         shell: pwsh
         run: |
-          $info = (Get-Item -LiteralPath 'bin/rechan.exe').VersionInfo
-          $expected = @{
-            CompanyName = 'SilverwireGames and contributors'
-            FileDescription = 'ReChan - Jackie Chan: Stuntmaster (PC)'
-            FileVersion = '2026.10.22.27'
-            OriginalFilename = 'rechan.exe'
-            ProductName = 'ReChan'
-            ProductVersion = '2026.10.22.27 (experimental PR #27)'
-            LegalCopyright = 'Copyright (c) 2026 _AG'
-          }
-          foreach ($key in $expected.Keys) {
-            $actual = $info.$key
-            if ($actual -ne $expected[$key]) {
-              throw "Invalid EXE metadata [$key]: expected '$($expected[$key])', got '$actual'"
-            }
-          }
-          if ($info.Language -notmatch 'Portug') { throw "Invalid language metadata: $($info.Language)" }
-          Write-Host "Executable version resource OK: $($info.FileDescription) / $($info.FileVersion) / $($info.Language)"
+          & scripts/verify-win-version.ps1
 
       - name: Validate locale resources
         shell: pwsh
         run: |
           python scripts/validate-localization.py
           if ($LASTEXITCODE -ne 0) { throw 'Locale validation failed' }
+          python -m unittest discover -s tests -p test_localization.py
+          if ($LASTEXITCODE -ne 0) { throw 'Catalog ordering regression tests failed' }
 
       - name: Pack experimental Windows build
         shell: pwsh

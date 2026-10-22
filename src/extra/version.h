@@ -1,7 +1,8 @@
 #pragma once
+#include "extra/versionnumber.h"
 // Game title
 #define JCS_TITLE "ReChan"
-#define GAME_VERSION "v1.0.2"
+#define GAME_VERSION "v" RECHAN_VERSION_STRING
 #define UPDATE_REPO_OWNER "SilverwireGames"
 #define UPDATE_REPO_NAME "ReChan"
 
