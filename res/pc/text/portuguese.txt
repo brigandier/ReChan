@@ -1,5 +1,7 @@
 # Português (Brasil)
 #
+# Frontend
+#
 [FE_BACK]
 Voltar
 
@@ -147,6 +149,9 @@ Italiano
 [FE_LSPA]
 Espanhol
 
+[FE_LPOR]
+Português (Brasil)
+
 [FE_CTL]
 Configurações de Controle
 
@@ -176,6 +181,9 @@ Xbox
 
 [FE_NX]
 Nintendo Switch
+
+[FE_PS]
+PlayStation
 
 [FE_CSD]
 EXIBIÇÃO DE STATUS
@@ -396,6 +404,9 @@ Volume da Música:
 [FE_VCV]
 Volume da Voz:
 
+[FE_SUB]
+Legendas:
+
 [FE_STR]
 Estéreo:
 
@@ -510,6 +521,10 @@ CONCLUÍDO
 [FE_DNCM]
 NÃO CONCLUÍDO
 
+#
+# Auto Updater
+#
+
 [FE_UPD]
 Atualização do Jogo
 
@@ -561,6 +576,10 @@ Instalando atualização...
 [FE_UPD_AVAIL]
 Atualização disponível
 
+#
+# Asset Extraction
+#
+
 [FE_ASSET_TITLE]
 Recursos do Jogo
 
@@ -590,6 +609,10 @@ Extraindo recursos do jogo...
 
 [FE_ASSET_ERR]
 Falha na extração: %s
+
+#
+# Mods and Cheats
+#
 
 [FE_MODS]
 Mods
@@ -624,15 +647,9 @@ Terremoto acrobático:
 [FE_CH_MIRR]
 Mundo Espelhado:
 
+#
+# PSX overrides
+#
+
 [0xC131692D]
 Pressione <ACT:OPEN_CLOSE_MENU> para abrir o menu principal.
-
-[FE_LPOR]
-Português (Brasil)
-
-[FE_PS]
-PlayStation
-
-[FE_SUB]
-Legendas:
-

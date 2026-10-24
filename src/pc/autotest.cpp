@@ -10,6 +10,9 @@
 #include "gen/control.h"
 #include "gen/world.h"
 #include "gen/game.h"
+#include "gen/director.h"
+#include "fe/hud.h"
+#include "gen/scoremgr.h"
 #include "gen/time.h"
 #include "p3d/context.h"
 #include "p3d/input.h"
@@ -148,6 +151,10 @@ int AutoTest_VerifyLocalization(const char* outputDirectory) {
 }
 
 static bool s_enabled = false;
+static std::string s_benchmarkFlow;
+static bool s_benchmarkTriggered = false;
+static f64 s_benchmarkStarted = 0.0;
+static s32 s_benchmarkScorePercent = -1;
 static s32 s_levelIndex = 0;
 static s32 s_levelId = -1;
 static s32 s_petalIndex = 0;
@@ -276,6 +283,12 @@ void AutoTest_ParseArgs(int argc, char** argv) {
         else if (std::strcmp(argv[i], "--trace-spawns") == 0) {
             s_traceSpawns = true;
         }
+        else if (std::strcmp(argv[i], "--benchmark-flow") == 0 && hasValue) {
+            s_benchmarkFlow = argv[++i];
+        }
+        else if (std::strcmp(argv[i], "--benchmark-score-percent") == 0 && hasValue) {
+            s_benchmarkScorePercent = std::atoi(argv[++i]);
+        }
         else if (std::strcmp(argv[i], "--petal") == 0 && hasValue) {
             s_petalIndex = std::atoi(argv[++i]);
         }
@@ -357,6 +370,55 @@ bool AutoTest_Step(GameState state) {
         p3d::display->AddOverlayCallback(CaptureOverlay);
     }
 
+    if (!s_benchmarkFlow.empty()) {
+        if (Time::GetTimeInSeconds() - s_startTime > 90.0) {
+            AutoTest_Fail(13, "benchmark flow did not complete within 90 seconds");
+            return false;
+        }
+        if (s_benchmarkTriggered) {
+            const bool ready = s_benchmarkFlow == "finish"
+                ? g_hud && g_hud->tally.state != 9
+                : state == GameState::Play;
+            if (ready) {
+                LOG_ALWAYS("[Benchmark] %s ready seconds=%.6f", s_benchmarkFlow.c_str(),
+                    Time::GetTimeInSeconds() - s_benchmarkStarted);
+                s_finished = true;
+                return false;
+            }
+            return true;
+        }
+        if (state == GameState::Play && s_playFrames >= 60 && g_game
+            && (!g_director || g_director->scriptState == 0)) {
+            World* world = g_game->GetWorld();
+            s_benchmarkStarted = Time::GetTimeInSeconds();
+            s_benchmarkTriggered = true;
+            LOG_ALWAYS("[Benchmark] %s trigger", s_benchmarkFlow.c_str());
+            if (s_benchmarkFlow == "finish" && g_director) {
+                if (s_benchmarkScorePercent >= 0 && s_benchmarkScorePercent <= 100 && g_scoreManager) {
+                    g_scoreManager->currentFightScore = (s32)((s64)g_scoreManager->parValue * s_benchmarkScorePercent / 100);
+                }
+                g_director->SetCodeSnip(Director::GetLevelEndScript(), Player::s_player);
+            }
+            else if (s_benchmarkFlow == "restart") {
+                g_game->SetState(GameState::DetermineNextGameState);
+            }
+            else if (s_benchmarkFlow == "hub" && world) {
+                world->SetTargetLevelPetal((u32)world->LevelIDToIndex(7), 0);
+                g_game->SetState(GameState::QueueLevelLoad);
+            }
+            else if (s_benchmarkFlow == "petal" && world
+                && world->GetCurrentPetalIndex() + 1 < (u32)world->GetCurLevelPetals()) {
+                world->SetTargetLevelPetal(world->GetCurrentLevelIndex(), world->GetCurrentPetalIndex() + 1);
+                g_game->SetState(GameState::QueuePetalLoad);
+            }
+            else {
+                AutoTest_Fail(14, "invalid benchmark flow for this level");
+                return false;
+            }
+            return true;
+        }
+    }
+
     if (state != GameState::Play) {
         if (s_playFrames == 0 && Time::GetTimeInSeconds() - s_startTime > kReachGameplayTimeoutSec) {
             AutoTest_Fail(11, "never reached gameplay");
@@ -379,7 +441,7 @@ bool AutoTest_Step(GameState state) {
             }
         }
     }
-    if (s_playFrames < s_frames) {
+    if (!s_benchmarkFlow.empty() || s_playFrames < s_frames) {
         return true;
     }
 

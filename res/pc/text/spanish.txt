@@ -148,6 +148,9 @@ Italiano
 [FE_LSPA]
 Espanol
 
+[FE_LPOR]
+Português (Brasil)
+
 [FE_CTL]
 Configuracion de Mando
 
@@ -177,6 +180,9 @@ Xbox
 
 [FE_NX]
 Nintendo Switch
+
+[FE_PS]
+PlayStation
 
 [FE_CSD]
 PANTALLA DE ESTADO
@@ -396,6 +402,9 @@ Volumen de musica:
 
 [FE_VCV]
 Volumen de voz:
+
+[FE_SUB]
+Subtítulos:
 
 [FE_STR]
 Stereo:
@@ -640,12 +649,3 @@ Mundo Espejo:
 
 [0xC131692D]
 Pulsa <ACT:OPEN_CLOSE_MENU> para abrir el menu principal.
-
-[FE_LPOR]
-Português (Brasil)
-
-[FE_PS]
-PlayStation
-
-[FE_SUB]
-Subtítulos:
