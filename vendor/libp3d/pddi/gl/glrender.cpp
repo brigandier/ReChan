@@ -2515,6 +2515,14 @@ bool glGamepad::SetLED(u8 red, u8 green, u8 blue) {
     return connected && glGamepadSetLED(red, green, blue);
 }
 
+bool glGamepad::GetAudioDevice(GamepadAudioDevice& device) const {
+    return connected && glGamepadGetAudioDevice(device);
+}
+
+bool glGamepad::SetSpeakerEnabled(bool enabled) {
+    return connected && glGamepadSetSpeakerEnabled(enabled);
+}
+
 // Platform factory
 
 pddiDevice* pddiCreate() { return new glDevice(); }

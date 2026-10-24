@@ -1,4 +1,5 @@
 #include "p3d/input.h"
+#include "pddi/gamepadaudio.h"
 #include "pddi/pddidev.h"
 #include <cmath>
 #include <cstring>
@@ -9,6 +10,15 @@ GamepadFamily PlatformInput::GetGamepadFamily() const {
 
 bool PlatformInput::SetGamepadLED(u8 red, u8 green, u8 blue) {
     return gamepadConnected && gamepad && gamepad->SetLED(red, green, blue);
+}
+
+bool PlatformInput::GetGamepadAudioDevice(GamepadAudioDevice& device) const {
+    device = {};
+    return gamepadConnected && gamepad && gamepad->GetAudioDevice(device);
+}
+
+bool PlatformInput::SetGamepadSpeakerEnabled(bool enabled) {
+    return gamepadConnected && gamepad && gamepad->SetSpeakerEnabled(enabled);
 }
 
 void PlatformInput::TrackKey(int key) {

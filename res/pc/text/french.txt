@@ -406,6 +406,12 @@ Volume voix:
 [FE_SUB]
 Sous-titres :
 
+[FE_CSPK]
+Haut-parleur de la manette
+
+[FE_CSPKV]
+Volume manette
+
 [FE_STR]
 Stereo:
 

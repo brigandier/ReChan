@@ -39,6 +39,8 @@ public:
     bool IsGamepadVibrationSupported() const;
     bool SetGamepadVibration(float lowFrequency, float highFrequency);
     bool SetGamepadLED(u8 red, u8 green, u8 blue);
+    bool GetGamepadAudioDevice(struct GamepadAudioDevice& device) const;
+    bool SetGamepadSpeakerEnabled(bool enabled);
 
     // Device activity detection - true if any input on that device this frame
     bool HasAnyKeyboardInput() const;

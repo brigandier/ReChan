@@ -1,8 +1,15 @@
 #include "pc/autotest.h"
 #include "pc/settings.h"
+#include "pc/audio.h"
+#include "pc/controllerspeaker.h"
+#include "pc/textmgr.h"
+#include "pddi/gamepadaudio.h"
 #include "extra/customtext.h"
+#include "extra/fecustommenumgr.h"
 #include "extra/controllerpromptstyle.h"
 #include "snd/sound.h"
+#include "snd/snddrct.h"
+#include "snd/fesnd.h"
 #include "ai/generator.h"
 #include "ai/player.h"
 #include "gen/ai.h"
@@ -29,6 +36,8 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#include <thread>
+#include <chrono>
 
 #include "vendor/stb/stb_image_write.h"
 
@@ -79,7 +88,81 @@ static bool VerifyControllerVibration() {
     return ok;
 }
 
+#if defined(RECHAN_VISUAL_TESTS)
+struct ControllerSpeakerMenuTest {
+    static bool Blocked() {
+        if (ControllerSpeaker::IsSupportedController()) return false;
+        const auto saved = g_settings;
+        feCustomMenuMgr menu;
+        Entry item{};
+        item.binding = EntryBinding_ControllerSpeaker;
+        item.lo = 0; item.hi = 1;
+        menu.ApplyValue(item, saved.controllerSpeakerEnabled ? 0 : 1);
+        item.binding = EntryBinding_ControllerSpeakerVolume;
+        item.hi = 100;
+        menu.ApplyValue(item, saved.controllerSpeakerVolume == 100 ? 0 : 100);
+        return g_settings.controllerSpeakerEnabled == saved.controllerSpeakerEnabled
+            && g_settings.controllerSpeakerVolume == saved.controllerSpeakerVolume;
+    }
+};
+#endif
+
+static bool VerifyControllerSpeakerFallback() {
+    struct TestPad : pddiGamepad {
+        bool connected = true;
+        mutable int identityQueries = 0;
+        unsigned int instance = 1;
+        void Poll() override {}
+        bool IsConnected() const override { return connected; }
+        bool IsButtonDown(int) const override { return false; }
+        float GetAxis(int axis) const override { return axis >= 4 ? -1.0f : 0.0f; }
+        bool SupportsVibration() const override { return false; }
+        bool SetVibration(float, float) override { return false; }
+        bool GetAudioDevice(GamepadAudioDevice& value) const override {
+            ++identityQueries;
+            value = {};
+            value.instance = instance; value.vendor = 0x054c; value.product = 0x0ce6;
+            std::strcpy(value.path, "unavailable-speaker-test-interface");
+            return connected;
+        }
+    } pad;
+    std::unique_ptr<pddiDevice> device(pddiCreate());
+    std::unique_ptr<pddiDisplay> display(device->NewDisplay());
+    PlatformInput input;
+    input.SetDisplay(display.get()); input.SetGamepad(&pad); input.ServiceInput();
+    auto* previousInput = p3d::input;
+    const GameSettings previousSettings = g_settings;
+    const bool primaryInitialized = AudioEngine::IsInitialized();
+    p3d::input = &input;
+    g_settings.controllerSpeakerEnabled = false;
+    ControllerSpeaker::Update();
+    bool ok = !ControllerSpeaker::IsReady() && !ControllerSpeaker::IsSupportedController();
+#if defined(RECHAN_VISUAL_TESTS)
+    ok &= ControllerSpeakerMenuTest::Blocked();
+#endif
+    g_settings.controllerSpeakerEnabled = true;
+    for (int i=0; i<5; ++i) {
+        ControllerSpeaker::Update();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    s16 pcm[]{1,2};
+    ok &= !ControllerSpeaker::IsReady() && !ControllerSpeaker::Play(pcm,2,48000,1,1,1);
+    pad.connected = false; input.ServiceInput(); ControllerSpeaker::Update();
+    ok &= !ControllerSpeaker::IsReady();
+    pad.connected = true; ++pad.instance; input.ServiceInput(); ControllerSpeaker::Update();
+    ok &= !ControllerSpeaker::IsReady();
+    g_settings.controllerSpeakerEnabled = false; ControllerSpeaker::Update(); ControllerSpeaker::Shutdown();
+    ok &= AudioEngine::IsInitialized() == primaryInitialized;
+    p3d::input = previousInput; g_settings = previousSettings;
+    return ok;
+}
+
 int AutoTest_VerifyLocalization(const char* outputDirectory) {
+    if (!VerifyControllerSpeakerFallback()) return 16;
+    std::puts("PASS controller speaker: disabled opens no audio output; unavailable USB interface, disconnect/reconnect and shutdown preserve primary audio state");
+#if defined(RECHAN_VISUAL_TESTS)
+    std::puts("PASS unsupported speaker controls cannot change saved enable/volume preferences");
+#endif
     if (!VerifyControllerVibration()) return 15;
     std::puts("PASS native vibration menu test: keyboard/mouse activation, expiry, disabled and disconnected");
     std::error_code ec;
@@ -107,15 +190,21 @@ int AutoTest_VerifyLocalization(const char* outputDirectory) {
                 g_customText.SetLanguage((GameLanguage)language);
                 ControllerPromptManager::SetStyle(style);
                 g_settings.subtitlesEnabled = enabled != 0;
+                g_settings.controllerSpeakerEnabled = enabled != 0;
+                g_settings.controllerSpeakerVolume = style * 33;
                 if (!g_customText.GetString("FE_LPOR") || !g_customText.GetString("FE_SUB")
                     || !g_settings.Save(path.string().c_str())) return 2;
                 g_customText.SetLanguage(LangEnglish);
                 ControllerPromptManager::SetStyle(ControllerPromptStyle_Auto);
                 g_settings.subtitlesEnabled = !enabled;
+                g_settings.controllerSpeakerEnabled = !enabled;
+                g_settings.controllerSpeakerVolume = -1;
                 if (!g_settings.Load(path.string().c_str())
                     || g_customText.GetLanguage() != language
                     || ControllerPromptManager::GetPreference() != style
-                    || g_settings.subtitlesEnabled != (enabled != 0)) return 3;
+                    || g_settings.subtitlesEnabled != (enabled != 0)
+                    || g_settings.controllerSpeakerEnabled != (enabled != 0)
+                    || g_settings.controllerSpeakerVolume != style * 33) return 3;
             }
         }
     }
@@ -143,7 +232,9 @@ int AutoTest_VerifyLocalization(const char* outputDirectory) {
     std::fclose(legacy);
     g_settings.Load(path.string().c_str());
     if (ControllerPromptManager::GetPreference() != ControllerPromptStyle_Auto
-        || !g_settings.subtitlesEnabled || g_customText.GetLanguage() != LangEnglish) return 11;
+        || !g_settings.subtitlesEnabled || g_customText.GetLanguage() != LangEnglish
+        || g_settings.controllerSpeakerEnabled || g_settings.controllerSpeakerVolume != 35) return 11;
+    std::puts("PASS controller speaker settings: disabled/35 defaults, enable and independent-volume round trips");
     std::puts("PASS native catalog loading and settings round trips: 6 languages x 4 styles x 2 subtitle preferences");
     std::puts("PASS native subtitle language selection: 6 languages x 5 movies");
     g_customText.Shutdown();
@@ -155,6 +246,15 @@ static std::string s_benchmarkFlow;
 static bool s_benchmarkTriggered = false;
 static f64 s_benchmarkStarted = 0.0;
 static s32 s_benchmarkScorePercent = -1;
+static bool s_speakerEvents = false;
+static bool s_speakerHotplug = false;
+static bool s_speakerDisconnected = false;
+static bool s_soundMenu = false;
+static u32 s_primaryChannels = 0;
+static bool s_primaryMusic = false;
+static int s_speakerEvent = 0;
+static s32 s_speakerNextFrame = 60;
+static u64 s_speakerInitialCount = 0;
 static s32 s_levelIndex = 0;
 static s32 s_levelId = -1;
 static s32 s_petalIndex = 0;
@@ -289,6 +389,17 @@ void AutoTest_ParseArgs(int argc, char** argv) {
         else if (std::strcmp(argv[i], "--benchmark-score-percent") == 0 && hasValue) {
             s_benchmarkScorePercent = std::atoi(argv[++i]);
         }
+#if defined(RECHAN_VISUAL_TESTS)
+        else if (std::strcmp(argv[i], "--speaker-events") == 0) {
+            s_speakerEvents = true;
+        }
+        else if (std::strcmp(argv[i], "--speaker-hotplug") == 0) {
+            s_speakerEvents = s_speakerHotplug = true;
+        }
+        else if (std::strcmp(argv[i], "--sound-menu") == 0) {
+            s_soundMenu = true;
+        }
+#endif
         else if (std::strcmp(argv[i], "--petal") == 0 && hasValue) {
             s_petalIndex = std::atoi(argv[++i]);
         }
@@ -419,7 +530,7 @@ bool AutoTest_Step(GameState state) {
         }
     }
 
-    if (state != GameState::Play) {
+    if (state != GameState::Play && !(s_soundMenu && state == GameState::Menu)) {
         if (s_playFrames == 0 && Time::GetTimeInSeconds() - s_startTime > kReachGameplayTimeoutSec) {
             AutoTest_Fail(11, "never reached gameplay");
             return false;
@@ -428,6 +539,93 @@ bool AutoTest_Step(GameState state) {
     }
 
     ++s_playFrames;
+#if defined(RECHAN_VISUAL_TESTS)
+    if (s_soundMenu && state == GameState::Play && s_playFrames >= 30 && g_feCustomMenuMgr) {
+        LOG_ALWAYS("[SpeakerMenuTest] controlsEnabled=%d", (int)ControllerSpeaker::IsSupportedController());
+        const auto previousLanguage = g_customText.GetLanguage();
+        g_textManager->PushState();
+        g_textManager->SetFontByName("Menu");
+        g_textManager->SetScale(SCREEN_SCALE_Y(0.4f));
+        g_textManager->SetWrapWidth(0);
+        bool fits = true;
+        const float left = SCALE_AND_CENTER_X(DEF_WINDOW_CENTER_X - DEF_WINDOW_W / 2 + DEF_LABEL_X_PAD);
+        const float right = SCALE_AND_CENTER_X(DEF_WINDOW_CENTER_X + DEF_WINDOW_W / 2 - DEF_VALUE_X_PAD);
+        const float sliderLeft = SCALE_AND_CENTER_X(DEF_WINDOW_CENTER_X + DEF_WINDOW_W / 2 - DEF_VALUE_X_PAD
+            - DEF_SLIDER_CIRCLE_SEGMENTS * DEF_SLIDER_CIRCLE_STEP + (DEF_SLIDER_CIRCLE_STEP - 12) / 2);
+        for (int language = 0; language < NumLanguages; ++language) {
+            g_customText.SetLanguage((GameLanguage)language);
+            const float toggleWidth = std::max(g_textManager->MeasureString(g_customText.GetText("FE_ON")).width,
+                g_textManager->MeasureString(g_customText.GetText("FE_OFF")).width);
+            const float labelWidth = g_textManager->MeasureString(g_customText.GetText("FE_CSPK")).width;
+            const float volumeWidth = g_textManager->MeasureString(g_customText.GetText("FE_CSPKV")).width;
+            LOG_ALWAYS("[SpeakerMenuTest] language=%d toggle=%.1f/%.1f volume=%.1f/%.1f", language,
+                labelWidth, right-left-toggleWidth, volumeWidth, sliderLeft-left);
+            fits &= labelWidth + 8 < right-left-toggleWidth && volumeWidth + 8 < sliderLeft-left;
+        }
+        g_customText.SetLanguage(previousLanguage);
+        g_textManager->PopState();
+        if (!fits) { AutoTest_Fail(20, "controller speaker label overlaps its value"); return false; }
+        g_feCustomMenuMgr->Activate(MenuPage_Sound);
+        g_game->SetState(GameState::Menu);
+    }
+    if (s_speakerEvents) {
+        g_settings.controllerSpeakerEnabled = true;
+        g_settings.controllerSpeakerVolume = 100;
+        if (Time::GetTimeInSeconds() - s_startTime > 90) {
+            AutoTest_Fail(17, "speaker event test did not reach a compatible endpoint");
+            return false;
+        }
+        if (!ControllerSpeaker::IsReady()) {
+            if (s_speakerHotplug && s_speakerEvent == 2 && !s_speakerDisconnected) {
+                s_speakerDisconnected = true;
+                LOG_ALWAYS("[SpeakerTest] Disconnection observed; waiting for USB reconnection");
+            }
+            return true;
+        }
+        if (s_speakerHotplug && s_speakerEvent == 2 && !s_speakerDisconnected) return true;
+        if (s_playFrames < s_speakerNextFrame) return true;
+        if (s_speakerEvent == 0) {
+            s_speakerInitialCount = ControllerSpeaker::AcceptedEffects();
+            s_primaryChannels = AudioEngine::GetOutputChannels();
+            s_primaryMusic = AudioEngine::IsMusicPlaying();
+        }
+        if (s_speakerEvent < 8) {
+            const u16 id = 251 + s_speakerEvent++;
+            const u64 before = ControllerSpeaker::AcceptedEffects();
+            s32 result = 0;
+            if (id <= 253 && g_frontEndSound) {
+                g_frontEndSound->ProcessSoundEvent(id - 228);
+            }
+            else {
+                LVector position = Player::s_player ? Player::s_player->pos : LVector{};
+                if (id == 254) position.x += 1000000;
+                result = CSoundDirect::PlayTransient(id, id <= 257 ? &position : nullptr, 0, 0);
+            }
+            const u64 copied = ControllerSpeaker::AcceptedEffects() - before;
+            LOG_ALWAYS("[SpeakerTest] transient=%u result=%d copied=%llu", (unsigned int)id, result, (unsigned long long)copied);
+            if (copied != (id <= 257 ? 1 : 0)) {
+                AutoTest_Fail(18, "speaker event was missing, duplicated or outside the allowlist");
+                return false;
+            }
+            s_speakerNextFrame = s_playFrames + 120;
+            return true;
+        }
+        if (ControllerSpeaker::AcceptedEffects() != s_speakerInitialCount + 7) {
+            AutoTest_Fail(18, "unexpected extra speaker events");
+            return false;
+        }
+        if (!AudioEngine::IsInitialized() || AudioEngine::GetOutputChannels() != s_primaryChannels
+            || (s_primaryMusic && !AudioEngine::IsMusicPlaying())) {
+            AutoTest_Fail(19, "primary audio state changed during controller playback");
+            return false;
+        }
+        LOG_ALWAYS("[SpeakerTest] PASS seven selected events copied once, including extra life; unselected event stayed on primary output");
+        LOG_ALWAYS("[SpeakerTest] PASS primary device channel count and music state preserved");
+        if (s_speakerHotplug) LOG_ALWAYS("[SpeakerTest] PASS disconnect/reconnect recovered the matched speaker endpoint");
+        s_finished = true;
+        return false;
+    }
+#endif
     if (s_playFrames == 30 && s_warpGenerator >= 0) {
         WarpToGenerator(s_warpGenerator);
     }

@@ -1,6 +1,7 @@
 #include "snd/trnssnd.h"
 #include "snd/sndmath.h"
 #include "snd/rsdworld.h"
+#include "pc/controllerspeakermixer.h"
 #include <cstdlib>
 
 // PSX: g_transData (0x800DAACC) - extracted from GAME_REL.CPE binary
@@ -173,7 +174,7 @@ s32 CGenericTransientSound::TriggerPositional(u16 pan) {
     u16 psxVol = PsxVol100(vol);
     s16 psxPitch = PsxPitch200(pitch);
 
-    return rsdWorld::PlayTransientPositional(sampleId, posPtr, psxVol, psxPitch, pan, flags);
+    return rsdWorld::PlayTransientPositional(sampleId, posPtr, psxVol, psxPitch, pan, flags, ControllerSpeakerTransient(soundId));
 }
 
 // PSX: TriggerNotPositional__22CGenericTransientSoundUs (TRNSSND.CPP:134, 0x800AAB9C)
@@ -204,7 +205,7 @@ s32 CGenericTransientSound::TriggerNotPositional(u16 pan) {
     u16 psxVolR = PsxVol100(volR);
     s16 psxPitch = PsxPitch200(pitch);
 
-    return rsdWorld::PlayTransientNonPositional(sampleId, psxVolL, psxVolR, psxPitch, pan);
+    return rsdWorld::PlayTransientNonPositional(sampleId, psxVolL, psxVolR, psxPitch, pan, ControllerSpeakerTransient(soundId));
 }
 
 // PSX: Load__22CGenericTransientSoundPCc (TRNSSND.CPP:169, 0x800AAD4C)

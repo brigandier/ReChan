@@ -342,6 +342,8 @@ public:
 
 class pddiGamepad : public pddiObject {
 public:
+    virtual bool GetAudioDevice(struct GamepadAudioDevice&) const { return false; }
+    virtual bool SetSpeakerEnabled(bool) { return false; }
     virtual GamepadFamily GetFamily() const { return GamepadFamily::Unknown; }
     virtual void Poll() = 0;
     virtual bool IsConnected() const = 0;

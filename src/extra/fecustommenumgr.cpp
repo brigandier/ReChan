@@ -1,5 +1,6 @@
 #include "gen/common.h"
 #include "fecustommenumgr.h"
+#include "pc/controllerspeaker.h"
 #include <cstdlib>
 #include "gen/display.h"
 #include "pc/inputaction.h"
@@ -537,7 +538,8 @@ static const char* GetLanguageDisplayToken(s32 index) {
 static bool IsVolumeSliderBinding(EntryBinding binding) {
     return binding == EntryBinding_MusicVol
         || binding == EntryBinding_EffectsVol
-        || binding == EntryBinding_DialogVol;
+        || binding == EntryBinding_DialogVol
+        || binding == EntryBinding_ControllerSpeakerVolume;
 }
 
 static s32 GetValueChangeSoundId(const Entry& entry) {
@@ -660,6 +662,8 @@ void feCustomMenuMgr::BuildPages() {
         Slider("FE_VCV", EntryBinding_DialogVol,  10, 0, 100),
         Toggle("FE_STR", EntryBinding_Stereo),
         Toggle("FE_SUB", EntryBinding_Subtitles),
+        Toggle("FE_CSPK", EntryBinding_ControllerSpeaker),
+        Slider("FE_CSPKV", EntryBinding_ControllerSpeakerVolume, 10, 0, 100),
         Button("FE_BCK", EntryEvent_Back),
                });
 
@@ -2818,7 +2822,8 @@ void feCustomMenuMgr::Adjust(s32 dir) {
     else if (e->type == EntryType_Slider) {
         if (e->binding == EntryBinding_MusicVol ||
             e->binding == EntryBinding_EffectsVol ||
-            e->binding == EntryBinding_DialogVol) {
+            e->binding == EntryBinding_DialogVol ||
+            e->binding == EntryBinding_ControllerSpeakerVolume) {
             static constexpr s32 kSegments = DEF_SLIDER_CIRCLE_SEGMENTS;
             s32 current = GetBoundValue(*e);
             if (current < 0) current = 0;
@@ -2851,6 +2856,8 @@ void feCustomMenuMgr::Adjust(s32 dir) {
 
 s32 feCustomMenuMgr::GetBoundValue(const Entry& e) const {
     switch (e.binding) {
+        case EntryBinding_ControllerSpeaker: return g_settings.controllerSpeakerEnabled ? 1 : 0;
+        case EntryBinding_ControllerSpeakerVolume: return g_settings.controllerSpeakerVolume;
         case EntryBinding_MusicVol: return g_sound ? (s32)g_sound->flag0 : 100;
         case EntryBinding_EffectsVol: return g_sound ? (s32)g_sound->flag2 : 100;
         case EntryBinding_DialogVol: return g_sound ? (s32)g_sound->flag1 : 100;
@@ -2891,10 +2898,18 @@ s32 feCustomMenuMgr::GetBoundValue(const Entry& e) const {
 }
 
 void feCustomMenuMgr::ApplyValue(const Entry& e, s32 v) {
+    if ((e.binding == EntryBinding_ControllerSpeaker || e.binding == EntryBinding_ControllerSpeakerVolume)
+        && !ControllerSpeaker::IsSupportedController()) return;
     if (v < e.lo) v = e.lo;
     if (v > e.hi) v = e.hi;
 
-    if (e.binding == EntryBinding_MusicVol) {
+    if (e.binding == EntryBinding_ControllerSpeaker) {
+        g_settings.controllerSpeakerEnabled = v != 0;
+    }
+    else if (e.binding == EntryBinding_ControllerSpeakerVolume) {
+        g_settings.controllerSpeakerVolume = v;
+    }
+    else if (e.binding == EntryBinding_MusicVol) {
         rsEvent(RS_SET_MUSIC_VOL, v, 0, 0);
         if (g_sound) g_sound->flag0 = (s16)v;
     }
@@ -4180,7 +4195,7 @@ static bool IsNeutralMenuColor(const xcColour1555& color) {
     return color.GetRed8() == 128 && color.GetGreen8() == 128 && color.GetBlue8() == 128;
 }
 
-static void DrawSliderCircleMeterPSX(f32 rightX, f32 textY, f32 value, tTexture* sliderOTex, tTexture* sliderFTex) {
+static void DrawSliderCircleMeterPSX(f32 rightX, f32 textY, f32 value, tTexture* sliderOTex, tTexture* sliderFTex, bool enabled = true) {
     static constexpr s32 kSegments = DEF_SLIDER_CIRCLE_SEGMENTS;
     static constexpr f32 kSliderIconSize = 12.0f;
 
@@ -4205,16 +4220,17 @@ static void DrawSliderCircleMeterPSX(f32 rightX, f32 textY, f32 value, tTexture*
         const bool isFilled = (i < filled);
         tTexture* tex = isFilled ? sliderFTex : sliderOTex;
         const f32 drawX = baseX + i * step + (step - kSliderIconSize) / 2;
+        const u8 tint = enabled ? 255 : 96;
         ScreenDraw::DrawQuad(tex,
                              SCALE_AND_CENTER_X(drawX), SCREEN_SCALE_Y(baseY),
                              SCREEN_SCALE_Y(kSliderIconSize), SCREEN_SCALE_Y(kSliderIconSize),
                              0.0f, 0.0f, 1.0f, 1.0f,
-                             255, 255, 255, 255);
+                             tint, tint, tint, 255);
     }
 }
 
-static void DrawSliderCircleMeterPSX(s32 rightX, s32 textY, s32 value, tTexture* sliderOTex, tTexture* sliderFTex) {
-    DrawSliderCircleMeterPSX((f32)rightX, (f32)textY, (f32)value, sliderOTex, sliderFTex);
+static void DrawSliderCircleMeterPSX(s32 rightX, s32 textY, s32 value, tTexture* sliderOTex, tTexture* sliderFTex, bool enabled = true) {
+    DrawSliderCircleMeterPSX((f32)rightX, (f32)textY, (f32)value, sliderOTex, sliderFTex, enabled);
 }
 
 static void DrawUniformBorderRectPSX(f32 x, f32 y, f32 w, f32 h, f32 borderPx,
@@ -5125,7 +5141,11 @@ void feCustomMenuMgr::RenderCurrentPage() {
         ) {
         for (s32 i = 0; i < page->numEntries; i++) {
             const Entry& item = page->entries[i];
-            const bool selected = (i == m_cursor);
+            const bool speakerDisabled = (item.binding == EntryBinding_ControllerSpeaker
+                || item.binding == EntryBinding_ControllerSpeakerVolume) && !ControllerSpeaker::IsSupportedController();
+            const bool selected = (i == m_cursor) && !speakerDisabled;
+            const xcColour1555 normalColor = speakerDisabled ? xcColour1555{92,92,92}
+                : xcColour1555{DEF_TEXT_NORM_R, DEF_TEXT_NORM_G, DEF_TEXT_NORM_B};
 
             s32 rowY = 0;
             s32 rowLabelX = labelX;
@@ -5339,7 +5359,8 @@ void feCustomMenuMgr::RenderCurrentPage() {
                     rowY,
                     GetBoundValue(item),
                     m_sliderOTex,
-                    m_sliderFTex);
+                    m_sliderFTex,
+                    !speakerDisabled);
             }
             else if (item.type == EntryType_Toggle && item.binding != EntryBinding_None) {
                 const s32 toggle = GetBoundValue(item);

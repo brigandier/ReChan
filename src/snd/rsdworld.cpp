@@ -9,6 +9,7 @@
 #include "ai/player.h"
 #include "p3d/p3dmath.h"
 #include "pc/audio.h"
+#include "pc/controllerspeaker.h"
 #include <vector>
 #include <mutex>
 #include <algorithm>
@@ -171,7 +172,7 @@ static bool RsdSampleToWax(u32 rsdSampleId, u32& outBank, u32& outSample) {
 static bool g_isDialogTransient = false;
 void rsdWorld::SetDialogTransient(bool isDialog) { g_isDialogTransient = isDialog; }
 
-s32 rsdWorld::PlayTransientPositional(u32 sampleId, void* posPtr, u16 volume, s16 pitch, u16 pan, u32 flags) {
+s32 rsdWorld::PlayTransientPositional(u32 sampleId, void* posPtr, u16 volume, s16 pitch, u16 pan, u32 flags, bool controllerSpeaker) {
     MARKFUNCTION(0x80080234);
 
     const bool isDialog = g_isDialogTransient;
@@ -184,6 +185,14 @@ s32 rsdWorld::PlayTransientPositional(u32 sampleId, void* posPtr, u16 volume, s1
     u32 bank, sample;
     if (!RsdSampleToWax(sampleId, bank, sample)) {
         return 0;
+    }
+
+    AudioSample speakerSample = AUDIO_SAMPLE_INVALID;
+    const bool resolvedForSpeaker = controllerSpeaker && ControllerSpeaker::IsReady();
+    if (resolvedForSpeaker) {
+        speakerSample = g_sound->GetBankSample(bank, sample);
+        AudioEngine::PlayControllerSample(speakerSample, PsxVolToFloat(volume) * g_sound->effectsVolume,
+            PsxPitchToFloat(pitch));
     }
 
     const LVector* objPos = static_cast<const LVector*>(posPtr);
@@ -206,7 +215,7 @@ s32 rsdWorld::PlayTransientPositional(u32 sampleId, void* posPtr, u16 volume, s1
 
     f32 pitchF = PsxPitchToFloat(pitch);
 
-    AudioSample s = g_sound->GetBankSample(bank, sample);
+    AudioSample s = resolvedForSpeaker ? speakerSample : g_sound->GetBankSample(bank, sample);
     if (s == AUDIO_SAMPLE_INVALID) {
         return 0;
     }
@@ -230,7 +239,7 @@ s32 rsdWorld::PlayTransientPositional(u32 sampleId, void* posPtr, u16 volume, s1
 
 // PSX: PlayTransient__8rsdWorldlUsUsUsUi (0x80080334)
 // Non-positional: separate L/R volumes, no 3D spatialization
-s32 rsdWorld::PlayTransientNonPositional(u32 sampleId, u16 volL, u16 volR, s16 pitch, u16 pan) {
+s32 rsdWorld::PlayTransientNonPositional(u32 sampleId, u16 volL, u16 volR, s16 pitch, u16 pan, bool controllerSpeaker) {
     MARKFUNCTION(0x80080334);
 
     if ((volL == 0 && volR == 0) || !g_sound) {
@@ -257,6 +266,7 @@ s32 rsdWorld::PlayTransientNonPositional(u32 sampleId, u16 volL, u16 volR, s16 p
         return 0;
     }
 
+    if (controllerSpeaker) AudioEngine::PlayControllerSample(s, vol, pitchF);
     AudioVoice v = AudioEngine::PlaySample(s, vol, pcPan, false);
     if (v != AUDIO_VOICE_INVALID && pitchF != 1.0f) {
         AudioEngine::SetVoicePitch(v, pitchF);

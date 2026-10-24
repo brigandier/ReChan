@@ -89,6 +89,8 @@ enum EntryBinding : u8 {
     EntryBinding_ControllerPromptStyle,
     EntryBinding_Language,
     EntryBinding_Subtitles,
+    EntryBinding_ControllerSpeaker,
+    EntryBinding_ControllerSpeakerVolume,
     EntryBinding_DisplayResolution,
     EntryBinding_DisplayScreenMode,
     EntryBinding_DisplayVsync,
@@ -415,6 +417,9 @@ public:
     void ReloadControllerPromptTextures();
 
 private:
+#if defined(RECHAN_VISUAL_TESTS)
+    friend struct ControllerSpeakerMenuTest;
+#endif
     void BuildPages();
     PageDef& AddPage(MenuPage id, const char* title,
                      const char* overlay, MenuPage parent, s32 parentEntry, bool pause,

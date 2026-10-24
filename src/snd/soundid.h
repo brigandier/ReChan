@@ -1,13 +1,14 @@
 #pragma once
 #include "core.h"
 
-// 256 transient sound entries. Each maps to an rsd sample + volume/pitch params.
+// 260 transient sound entries. Each maps to an rsd sample + volume/pitch params.
 // The rsd sample (0-70) indexes the currently active WAX bank's descriptor table.
 
 // Transient sound IDs - used with CSound::PlayTransient / PlayTransientStereo.
 // IDs 0-216: gameplay sounds (hit, env, footstep, etc.)
 // IDs 217-253: front-end UI sounds
-// IDs 254-255: unused/padding
+// IDs 254-255: red/gold dragon pickups; ID 256: healing pickup
+// ID 257: extra-life pickup
 enum SoundId : u16 {
     // Gameplay - combat
     SND_HIT_0              = 0,   // rsd 38
@@ -96,9 +97,9 @@ enum SoundId : u16 {
     SND_FE_JINGLE_1        = 248, // rsd 12, jingle trigger 1
     SND_FE_JINGLE_2        = 249, // rsd 44, jingle trigger 2
     SND_FE_JINGLE_3        = 250, // rsd 12, jingle trigger 3
-    SND_FE_JINGLE_4        = 251, // rsd 43, jingle trigger 4
-    SND_FE_JINGLE_5        = 252, // rsd 28, jingle trigger 5
-    SND_FE_JINGLE_6        = 253, // rsd 35, jingle trigger 6
+    SND_FE_JINGLE_4        = 251, // rsd 12, red-dragon tally
+    SND_FE_JINGLE_5        = 252, // rsd 12, gold-dragon tally
+    SND_FE_JINGLE_6        = 253, // rsd 12, gold bonus
 
     SND_INVALID            = 0xFFFF,
 };

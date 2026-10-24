@@ -3,6 +3,7 @@ class Game;
 int AutoTest_VerifyLocalization(const char* outputDirectory);
 #if defined(RECHAN_VISUAL_TESTS)
 int AutoTest_VerifyEngineIntegration(const char* outputDirectory);
+int AutoTest_ProbeControllerSpeaker(const char* outputDirectory, bool play, int volume);
 int AutoTest_RenderMovieSubtitles(const char* movieDirectory, const char* outputDirectory);
 int AutoTest_VerifyRuntime(const char* outputDirectory);
 void AutoTest_PrepareExitScenario(Game& game, const char* scenario);
@@ -18,6 +19,9 @@ enum class GameState : s32;
 //        [--benchmark-flow finish|restart|hub|petal]
 //        [--benchmark-score-percent 0..100]
 // Exit code: 0 finished, 10 data missing, 11 gameplay timeout, 12 capture failed, 13 flow timeout, 14 invalid flow.
+// Test builds also accept --speaker-events to exercise the original transient audio path.
+// --speaker-hotplug pauses after two effects until the USB speaker disconnects and reconnects.
+// --sound-menu opens the existing sound page for renderer screenshots.
 void AutoTest_ParseArgs(int argc, char** argv);
 bool AutoTest_IsEnabled();
 

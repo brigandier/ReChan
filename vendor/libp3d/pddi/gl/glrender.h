@@ -479,6 +479,8 @@ class glGamepad : public pddiGamepad {
 public:
     ~glGamepad() override;
     GamepadFamily GetFamily() const override { return family; }
+    bool GetAudioDevice(GamepadAudioDevice& device) const override;
+    bool SetSpeakerEnabled(bool enabled) override;
     void Poll() override;
     bool IsConnected() const override { return connected; }
     bool IsButtonDown(int button) const override;

@@ -1,4 +1,5 @@
 #include "pddi/gl/glgamepadrumble_sdl.h"
+#include "pddi/gamepadaudioreport.h"
 
 #include <cstring>
 #include <array>
@@ -68,6 +69,9 @@ static bool g_ledSucceeded = false;
 static bool g_ledOwned = false;
 static Uint8 g_ledRed = 0, g_ledGreen = 0, g_ledBlue = 0;
 static Uint32 g_ledLastAttempt = 0;
+static bool g_speakerOwned = false;
+static Uint16 g_lastLow = 0, g_lastHigh = 0;
+static Uint32 g_lastRumbleTime = 0;
 
 static void SetPlayerIndicator(SDL_GameController* controller, int playerIndex) {
 #if SDL_VERSION_ATLEAST(2, 0, 12)
@@ -87,6 +91,9 @@ static void UpdatePlayerIndicators() {
 }
 
 static void CloseActiveController() {
+    if (g_speakerOwned) glGamepadSetSpeakerEnabled(false);
+    g_speakerOwned = false;
+    g_lastLow = g_lastHigh = 0;
     SetPlayerIndicator(g_activeController, -1);
 #if SDL_VERSION_ATLEAST(2, 0, 14)
     if (g_ledOwned && g_activeJoystick && SDL_JoystickGetAttached(g_activeJoystick)) {
@@ -450,10 +457,43 @@ bool glGamepadRumbleSet(float lowFrequency, float highFrequency) {
     const Uint32 durationMs = (lowAmp == 0 && highAmp == 0) ? 0u : 500u;
 
     if (g_activeController && SDL_GameControllerRumble(g_activeController, lowAmp, highAmp, durationMs) == 0) {
+        g_lastLow = lowAmp; g_lastHigh = highAmp; g_lastRumbleTime = SDL_GetTicks();
         return true;
     }
 
     return g_activeJoystick && SDL_JoystickRumble(g_activeJoystick, lowAmp, highAmp, durationMs) == 0;
+}
+
+bool glGamepadGetAudioDevice(GamepadAudioDevice& device) {
+    device = {};
+#if SDL_VERSION_ATLEAST(2, 24, 0)
+    if (!g_activeJoystick || !SDL_JoystickGetAttached(g_activeJoystick)) return false;
+    const char* path = SDL_JoystickPath(g_activeJoystick);
+    if (!path || std::strlen(path) >= sizeof(device.path)) return false;
+    std::strcpy(device.path, path);
+    device.instance = (unsigned int)SDL_JoystickInstanceID(g_activeJoystick);
+    device.vendor = SDL_JoystickGetVendor(g_activeJoystick);
+    device.product = SDL_JoystickGetProduct(g_activeJoystick);
+    return true;
+#else
+    return false;
+#endif
+}
+
+bool glGamepadSetSpeakerEnabled(bool enabled) {
+#if SDL_VERSION_ATLEAST(2, 24, 0)
+    if (!g_activeController || !SDL_GameControllerGetAttached(g_activeController)
+        || SDL_GameControllerGetType(g_activeController) != SDL_CONTROLLER_TYPE_PS5
+        || SDL_JoystickGetVendor(g_activeJoystick) != 0x054c) return false;
+    const bool vibrating = SDL_GetTicks() - g_lastRumbleTime < 500;
+    const auto report = DualSenseSpeakerReport(enabled, vibrating ? (g_lastLow >> 8) : 0,
+        vibrating ? (g_lastHigh >> 8) : 0, SDL_JoystickGetFirmwareVersion(g_activeJoystick));
+    if (SDL_GameControllerSendEffect(g_activeController, report.data(), (int)report.size()) != 0) return false;
+    g_speakerOwned = enabled;
+    return true;
+#else
+    return false;
+#endif
 }
 
 bool glGamepadSetLED(unsigned char red, unsigned char green, unsigned char blue) {
@@ -480,6 +520,8 @@ bool glGamepadSetLED(unsigned char red, unsigned char green, unsigned char blue)
 
 #else
 
+bool glGamepadGetAudioDevice(GamepadAudioDevice&) { return false; }
+bool glGamepadSetSpeakerEnabled(bool) { return false; }
 bool glGamepadSetLED(unsigned char, unsigned char, unsigned char) { return false; }
 
 GamepadFamily glGamepadGetFamily() { return GamepadFamily::Unknown; }
