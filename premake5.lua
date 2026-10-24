@@ -22,7 +22,7 @@ if _OPTIONS["tests"] then
         targetdir "build/tests"
         objdir "build/obj/tests/%{cfg.buildcfg}/support"
         includedirs { "src", "vendor/libp3d" }
-        files { "tests/subtitles.cpp", "tests/promptstyle.cpp", "tests/controllerfeedback.cpp", "src/radmovie/subtitles.cpp" }
+        files { "tests/subtitles.cpp", "tests/promptstyle.cpp", "tests/controllerfeedback.cpp", "tests/controllerspeaker.cpp", "src/radmovie/subtitles.cpp" }
         filter { "system:windows", "configurations:ReleaseASan" }
             targetname "support-tests-asan"
             buildoptions { "/fsanitize=address" }
@@ -70,7 +70,7 @@ project "rechan"
 
     if _OPTIONS["tests"] then
         defines { "RECHAN_VISUAL_TESTS" }
-        files { "tests/movievisual.cpp" }
+        files { "tests/movievisual.cpp", "tests/speakerprobe.cpp" }
     end
 
     filter "system:windows"
@@ -101,6 +101,7 @@ project "rechan"
             "setupapi",
             "version",
             "winmm",
+            "ole32", "uuid",
         }
 
     filter "system:linux"

@@ -406,6 +406,12 @@ Volumen de voz:
 [FE_SUB]
 Subtítulos:
 
+[FE_CSPK]
+Altavoz del mando
+
+[FE_CSPKV]
+Volumen del mando
+
 [FE_STR]
 Stereo:
 

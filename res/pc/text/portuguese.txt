@@ -407,6 +407,12 @@ Volume da Voz:
 [FE_SUB]
 Legendas:
 
+[FE_CSPK]
+Alto-falante do controle
+
+[FE_CSPKV]
+Volume do controle
+
 [FE_STR]
 Estéreo:
 

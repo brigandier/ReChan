@@ -8,10 +8,12 @@
 
 void TestPromptStyles();
 void TestControllerFeedback();
+void TestControllerSpeaker();
 
 int main() {
     TestPromptStyles();
     TestControllerFeedback();
+    TestControllerSpeaker();
     MovieSubtitles subtitles;
     assert(!subtitles.Parse(""));
     assert(!subtitles.Parse("not an SRT"));

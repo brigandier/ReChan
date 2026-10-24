@@ -23,6 +23,7 @@ public:
     static bool Init();
     static void Shutdown();
     static bool IsInitialized();
+    static bool PlayControllerSample(AudioSample sample, f32 volume, f32 pitch);
 
     // Sample management (preloaded PCM in memory)
     // data: interleaved s16 PCM, takes ownership via copy

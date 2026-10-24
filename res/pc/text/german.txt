@@ -406,6 +406,12 @@ Sprachlautstaerke:
 [FE_SUB]
 Untertitel:
 
+[FE_CSPK]
+Controller-Lautsprecher
+
+[FE_CSPKV]
+Lautsprecherpegel
+
 [FE_STR]
 Stereo:
 

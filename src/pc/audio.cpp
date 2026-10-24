@@ -1,5 +1,6 @@
 #include "gen/common.h"
 #include "pc/audio.h"
+#include "pc/controllerspeaker.h"
 #include "gen/config.h"
 #include "p3d/fileio.h"
 #include "miniaudio.h"
@@ -895,6 +896,7 @@ bool AudioEngine::Init() {
 }
 
 void AudioEngine::Shutdown() {
+    ControllerSpeaker::Shutdown();
     if (!g_initialized) return;
 
 #if defined(RC_PLATFORM_SWITCH)
@@ -923,6 +925,14 @@ void AudioEngine::Shutdown() {
 
 bool AudioEngine::IsInitialized() {
     return g_initialized;
+}
+
+bool AudioEngine::PlayControllerSample(AudioSample handle, f32 volume, f32 pitch) {
+    if (!ControllerSpeaker::IsReady()) return false;
+    std::lock_guard<std::mutex> lock(g_voiceMutex);
+    if (!handle || handle > MAX_SAMPLES) return false;
+    const auto& sample = g_samples[handle - 1];
+    return ControllerSpeaker::Play(sample.data, sample.numFrames, sample.sampleRate, sample.channels, volume, pitch);
 }
 
 AudioSample AudioEngine::LoadSample(const s16* data, u32 numFrames, u32 sampleRate, u32 channels) {
@@ -965,6 +975,7 @@ void AudioEngine::UnloadSample(AudioSample handle) {
 }
 
 void AudioEngine::UnloadAllSamples() {
+    ControllerSpeaker::StopAll();
     std::lock_guard<std::mutex> lock(g_voiceMutex);
     for (u32 i = 0; i < MAX_SAMPLES; i++) {
         delete[] g_samples[i].data;
@@ -1121,6 +1132,7 @@ void AudioEngine::StopVoice(AudioVoice voice) {
 }
 
 void AudioEngine::StopAllVoices() {
+    ControllerSpeaker::StopAll();
     std::lock_guard<std::mutex> lock(g_voiceMutex);
     for (u32 i = 0; i < MAX_VOICES; i++) {
         g_voices[i].active = false;

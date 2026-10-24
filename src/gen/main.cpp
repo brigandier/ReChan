@@ -25,6 +25,7 @@
 #include "snd/rsevent.h"
 #include "extra/fecustommenumgr.h"
 #include "extra/assetexporter.h"
+#include "pc/controllerspeaker.h"
 #include "pc/apppaths.h"
 #include "pc/autotest.h"
 #include "extra/gltfloader.h"
@@ -223,6 +224,11 @@ int main(int argc, char** argv) {
     if (argc >= 3 && std::strcmp(argv[1], "--test-localization") == 0) {
         return AutoTest_VerifyLocalization(argv[2]);
     }
+#if defined(RECHAN_VISUAL_TESTS)
+    if (argc >= 3 && std::strcmp(argv[1], "--test-controller-speaker") == 0)
+        return AutoTest_ProbeControllerSpeaker(argv[2], argc >= 4 && std::strcmp(argv[3], "play") == 0,
+            argc >= 5 ? std::atoi(argv[4]) : 35);
+#endif
 
     // Headless verification/export path used by automated round-trip checks
     // and mod authors who want the same output as the DebugUI button.
@@ -408,6 +414,7 @@ int main(int argc, char** argv) {
         if (p3d::input) {
             p3d::input->ServiceInput();
         }
+        ControllerSpeaker::Update();
         if (g_actionInput) {
             g_actionInput->Update(p3d::input);
         }

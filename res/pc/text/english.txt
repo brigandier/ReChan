@@ -406,6 +406,12 @@ Voice Volume:
 [FE_SUB]
 Subtitles:
 
+[FE_CSPK]
+Controller speaker
+
+[FE_CSPKV]
+Controller volume
+
 [FE_STR]
 Stereo:
 

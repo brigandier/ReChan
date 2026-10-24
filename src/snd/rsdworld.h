@@ -15,7 +15,7 @@ namespace rsdWorld {
     // pitch: PSX SPU pitch (1024 = normal)
     // pan: pan value
     // flags: additional flags
-    s32 PlayTransientPositional(u32 sampleId, void* posPtr, u16 volume, s16 pitch, u16 pan, u32 flags);
+    s32 PlayTransientPositional(u32 sampleId, void* posPtr, u16 volume, s16 pitch, u16 pan, u32 flags, bool controllerSpeaker = false);
     void SetDialogTransient(bool isDialog);
 
     // PSX: GetObjectVolumes__8rsdWorld... - computes PSX-accurate stereo L/R
@@ -30,7 +30,7 @@ namespace rsdWorld {
     // Non-positional variant: takes separate L/R volumes
     // volL: left channel PSX SPU volume
     // volR: right channel PSX SPU volume
-    s32 PlayTransientNonPositional(u32 sampleId, u16 volL, u16 volR, s16 pitch, u16 pan);
+    s32 PlayTransientNonPositional(u32 sampleId, u16 volL, u16 volR, s16 pitch, u16 pan, bool controllerSpeaker = false);
 
     void UpdateSpatialAudioState();
     void StopAllPersistentSounds();

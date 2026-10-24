@@ -4,6 +4,8 @@
 
 struct GameSettings {
     bool subtitlesEnabled = true;
+    bool controllerSpeakerEnabled = false;
+    s32 controllerSpeakerVolume = 35;
     bool Load(const char* path);
     bool Save(const char* path);
 };

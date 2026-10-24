@@ -351,6 +351,10 @@ static s32 GetLanguageSetting() {
 
 static s32 GetSubtitlesSetting() { return g_settings.subtitlesEnabled ? 1 : 0; }
 static void SetSubtitlesSetting(s32 value) { g_settings.subtitlesEnabled = value != 0; }
+static s32 GetControllerSpeaker() { return g_settings.controllerSpeakerEnabled ? 1 : 0; }
+static void SetControllerSpeaker(s32 value) { g_settings.controllerSpeakerEnabled = value != 0; }
+static s32 GetControllerSpeakerVolume() { return g_settings.controllerSpeakerVolume; }
+static void SetControllerSpeakerVolume(s32 value) { g_settings.controllerSpeakerVolume = value; }
 
 static void SetLanguageSetting(s32 v) {
     if (v < 0 || v >= (s32)NumLanguages) {
@@ -385,6 +389,8 @@ static void SetShadowQualitySetting(s32 v) {
 static const SettingDef kSettingDefs[] = {
     { "general", "language",      0, 0, (s32)NumLanguages - 1, GetLanguageSetting,    SetLanguageSetting },
     { "general", "subtitles",     1, 0, 1, GetSubtitlesSetting, SetSubtitlesSetting },
+    { "audio", "controller_speaker", 0, 0, 1, GetControllerSpeaker, SetControllerSpeaker },
+    { "audio", "controller_speaker_volume", 35, 0, 100, GetControllerSpeakerVolume, SetControllerSpeakerVolume },
     { "audio", "music_volume",   100, 0, 100, GetMusicVolume,   SetMusicVolume },
     { "audio", "effects_volume", 100, 0, 100, GetEffectsVolume, SetEffectsVolume },
     { "audio", "dialog_volume",  100, 0, 100, GetDialogVolume,  SetDialogVolume },

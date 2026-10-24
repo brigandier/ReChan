@@ -28,7 +28,8 @@ class CatalogIntegrity(unittest.TestCase):
         root = Path(__file__).resolve().parents[1] / 'res/pc/text'
         reference = localization.catalog(root / 'english.txt')
         keys = list(reference)
-        for preceding, following in [('FE_LSPA', 'FE_LPOR'), ('FE_NX', 'FE_PS'), ('FE_VCV', 'FE_SUB')]:
+        for preceding, following in [('FE_LSPA', 'FE_LPOR'), ('FE_NX', 'FE_PS'), ('FE_VCV', 'FE_SUB'),
+                                     ('FE_SUB', 'FE_CSPK'), ('FE_CSPK', 'FE_CSPKV')]:
             self.assertEqual(keys[keys.index(preceding) + 1], following)
         for path in root.glob('*.txt'):
             localization.validate_order(reference, localization.catalog(path), path)
