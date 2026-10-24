@@ -62,8 +62,9 @@ bool MovieSubtitles::Parse(std::string_view contents) {
 
     std::vector<std::string_view> block;
     auto flush = [&]() {
-        if (block.size() < 3) { block.clear(); return; }
-        bool validIndex = !block[0].empty();
+        if (block.empty()) return;
+        if (block.size() < 3 || block.size() > 4) { ++rejectedCues; block.clear(); return; }
+        bool validIndex = !Trim(block[0]).empty();
         for (char c : Trim(block[0])) validIndex &= c >= '0' && c <= '9';
         const auto timing = block[1];
         const size_t arrow = timing.find("-->");
@@ -78,6 +79,7 @@ bool MovieSubtitles::Parse(std::string_view contents) {
             }
             entries.push_back(std::move(entry));
         }
+        else ++rejectedCues;
         block.clear();
     };
     while (!contents.empty()) {
@@ -98,12 +100,17 @@ bool MovieSubtitles::Parse(std::string_view contents) {
 
 std::string MovieSubtitles::TextAt(double seconds) const {
     std::string text;
+    size_t lines = 0;
     if (!std::isfinite(seconds) || seconds < 0.0) return text;
     for (const auto& entry : entries) {
         if (entry.startSeconds > seconds) break;
         if (seconds < entry.endSeconds) {
+            const size_t cueLines = 1 + std::count(entry.text.begin(), entry.text.end(), '\n');
+            // Bound external overlapping tracks without truncating a cue mid-sentence.
+            if (lines + cueLines > 4) continue;
             if (!text.empty()) text += '\n';
             text += entry.text;
+            lines += cueLines;
         }
     }
     return text;

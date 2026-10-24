@@ -1,6 +1,8 @@
 #include "gen/common.h"
 #include "customtext.h"
 #include "xclib/xclib.h"
+#include <cerrno>
+#include <limits>
 
 CustomText g_customText;
 
@@ -12,39 +14,35 @@ const char* CustomText::GetLanguageCode() const {
 
 // PSX: CustomText::Init
 void CustomText::Init() {
-    ClearStrings();
+    LoadLanguage(lang);
+}
 
-    const char* langPath = nullptr;
-    switch (lang) {
-        case LangEnglish:
-            langPath = "pc/text/english.txt";
-            break;
-        case LangGerman:
-            langPath = "pc/text/german.txt";
-            break;
-        case LangFrench:
-            langPath = "pc/text/french.txt";
-            break;
-        case LangItalian:
-            langPath = "pc/text/italian.txt";
-            break;
-        case LangSpanish:
-            langPath = "pc/text/spanish.txt";
-            break;
-        case LangPortugueseBrazil:
-            langPath = "pc/text/portuguese.txt";
-            break;
-        default:
-            langPath = "pc/text/english.txt";
-            break;
+bool CustomText::LoadLanguage(GameLanguage language) {
+    static constexpr const char* paths[] = { "pc/text/english.txt", "pc/text/german.txt",
+        "pc/text/french.txt", "pc/text/italian.txt", "pc/text/spanish.txt", "pc/text/portuguese.txt" };
+    static_assert(std::size(paths) == NumLanguages);
+    std::vector<StringEntry> next;
+    if (!LoadTextFile(paths[LangEnglish], next)) return false;
+    if (language != LangEnglish) {
+        std::vector<StringEntry> translated;
+        if (!LoadTextFile(paths[language], translated)) return false;
+        for (auto& entry : translated) {
+            bool replaced = false;
+            for (auto& fallback : next) {
+                if (fallback.hash == entry.hash) {
+                    fallback.text = std::move(entry.text);
+                    replaced = true;
+                    break;
+                }
+            }
+            if (!replaced) next.push_back(std::move(entry));
+        }
     }
-
-    if (!langPath) {
-        LOG("[CustomText::Init] No language path set");
-        return;
-    }
-
-    LoadTextFile(langPath);
+    // Commit only complete reads; failed switches preserve borrowed views and revision.
+    strings.swap(next);
+    lang = language;
+    ++localizationID;
+    return true;
 }
 
 void CustomText::Shutdown() {
@@ -56,12 +54,11 @@ void CustomText::SetLanguage(GameLanguage language) {
         language = LangEnglish;
     }
 
-    if (lang == language) {
+    if (lang == language && !strings.empty()) {
         return; // no change
     }
-    lang = language;
-    localizationID++;
-    Init(); // reload with new language
+    if (!LoadLanguage(language))
+        LOG_ALWAYS("[CustomText] Language switch to %d failed; retaining language %d", (s32)language, (s32)lang);
 }
 
 const char* CustomText::GetString(const char* token) const {
@@ -107,7 +104,7 @@ void CustomText::ClearStrings() {
     strings.clear();
 }
 
-bool CustomText::LoadTextFile(const char* path) {
+bool CustomText::LoadTextFile(const char* path, std::vector<StringEntry>& entries) {
     if (!path) {
         return false;
     }
@@ -204,7 +201,7 @@ bool CustomText::LoadTextFile(const char* path) {
         else if (expectingText && !pendingToken.empty()) {
             // This line is the text for pendingHash
             bool replaced = false;
-            for (auto& entry : strings) {
+            for (auto& entry : entries) {
                 if (entry.hash == pendingHash) {
                     entry.text = line;
                     replaced = true;
@@ -215,7 +212,7 @@ bool CustomText::LoadTextFile(const char* path) {
                 StringEntry entry;
                 entry.hash = pendingHash;
                 entry.text = line;
-                strings.push_back(entry);  // Simple vector append
+                entries.push_back(entry);
             }
             expectingText = false;
             pendingToken.clear();
@@ -223,7 +220,11 @@ bool CustomText::LoadTextFile(const char* path) {
         }
     }
 
-    LOG("[CustomText::LoadTextFile] Loaded %u strings from %s", (u32)strings.size(), path);
+    if (entries.empty() || expectingText) {
+        LOG_ALWAYS("[CustomText] Empty or incomplete catalog: %s", path);
+        return false;
+    }
+    LOG("[CustomText::LoadTextFile] Loaded %u strings from %s", (u32)entries.size(), path);
     return true;
 }
 
@@ -237,11 +238,14 @@ bool CustomText::TryParseTokenHash(const std::string& token, u32* outHash) {
     const bool startsWithDigit = std::isdigit((unsigned char)token[0]) != 0;
     if (isHex || startsWithDigit) {
         char* endPtr = nullptr;
+        errno = 0;
         unsigned long value = std::strtoul(token.c_str(), &endPtr, 0);
-        if (endPtr && *endPtr == '\0') {
+        if (endPtr != token.c_str() && *endPtr == '\0' && errno != ERANGE
+            && value <= std::numeric_limits<u32>::max()) {
             *outHash = (u32)value;
             return true;
         }
+        return false;
     }
 
     // String token path: enforce max 16 chars, then hash with xcHash.

@@ -152,16 +152,17 @@ Game::~Game() {
         delete g_oxFontFile;
         g_oxFontFile = nullptr;
     }
-    ScreenDraw::Shutdown();
+    Close();
 
     // Close and delete all managers
     while (ccMinNode* n = managerList.RemHead()) {
         Manager* mgr = static_cast<Manager*>(n);
-        mgr->Close();
         delete mgr;
     }
+    g_ai = nullptr;
+    g_time = nullptr;
 
-    Close();
+    ScreenDraw::Shutdown();
     g_game = nullptr;
 }
 
@@ -281,10 +282,16 @@ void Game::InternalClose() {
     g_customText.Shutdown();
 #endif
 
-    // Destroy player entity
-    if (Player::s_player) {
+    // Unlink entities before freeing them; the AI lists otherwise retain the player.
+    if (g_ai) {
+        g_ai->UnPopulate(1);
+    }
+    else if (Player::s_player) {
         delete Player::s_player;
     }
+
+    // Unload world references while the managers they depend on are still alive.
+    if (worldManager) worldManager->Unload();
 
     // Close all managers in reverse order
     for (ccMinNode* n = managerList.tail; n; ) {

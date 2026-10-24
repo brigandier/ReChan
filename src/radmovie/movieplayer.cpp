@@ -278,6 +278,9 @@ bool MoviePlayer::Open(const char* path) {
         path, frameWidth, frameHeight, sectorCount, sectorSize, videoChunkData, audioPCMWritten,
         1.0 / frameInterval);
     LoadSubtitles(path);
+#if defined(RECHAN_VISUAL_TESTS)
+    LOG_ALWAYS("[RuntimeMovieTest] Opened %s", path);
+#endif
     return true;
 }
 
@@ -297,6 +300,9 @@ void MoviePlayer::LoadSubtitles(const char* moviePath) {
     if (!xcReadFileLow(path.c_str(), &data, &size)) return;
     if (!subtitles.Parse(std::string_view((const char*)data, size))) {
         LOG("[MoviePlayer] Invalid or empty subtitles: %s", path.c_str());
+    }
+    else if (subtitles.RejectedCueCount()) {
+        LOG_ALWAYS("[MoviePlayer] Skipped %zu malformed subtitle cues: %s", subtitles.RejectedCueCount(), path.c_str());
     }
     delete[] data;
 }

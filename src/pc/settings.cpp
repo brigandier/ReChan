@@ -20,6 +20,8 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include <cerrno>
+#include <limits>
 
 GameSettings g_settings;
 
@@ -160,19 +162,22 @@ static bool EqualsIgnoreCase(const char* lhs, const char* rhs) {
     return *lhs == '\0' && *rhs == '\0';
 }
 
-static bool ParseSettingValue(const char* text, s32& outValue) {
+static bool ParseSettingValue(const char* text, s32& outValue, bool allowBoolean = true) {
     char* end = nullptr;
+    errno = 0;
     long parsed = strtol(text, &end, 10);
     if (end != text) {
         while (*end == ' ' || *end == '\t' || *end == '\r' || *end == '\n') {
             end++;
         }
-        if (*end == '\0') {
+        if (*end == '\0' && errno != ERANGE
+            && parsed >= std::numeric_limits<s32>::min() && parsed <= std::numeric_limits<s32>::max()) {
             outValue = (s32)parsed;
             return true;
         }
     }
 
+    if (!allowBoolean) return false;
     if (EqualsIgnoreCase(text, "true") || EqualsIgnoreCase(text, "on") || EqualsIgnoreCase(text, "yes")) {
         outValue = 1;
         return true;
@@ -465,13 +470,13 @@ static bool ParseKeybindSettingKey(const char* key, Action& outAction, s32& outS
     }
 
     s32 slot = -1;
-    if (!ParseSettingValue(slotSep + 1, slot)) {
+    if (!ParseSettingValue(slotSep + 1, slot, false)) {
+        return false;
+    }
+    if (slot < 1 || slot > 2) {
         return false;
     }
     slot -= 1;
-    if (slot < 0 || slot >= 2) {
-        return false;
-    }
 
     char tokenUpper[48] = {};
     const s32 tokenLen = (s32)(slotSep - key);
@@ -695,7 +700,7 @@ bool GameSettings::Load(const char* path) {
                 }
 
                 s32 parsedValue = 0;
-                if (!ParseSettingValue(valueText, parsedValue)) {
+                if (!ParseSettingValue(valueText, parsedValue, false)) {
                     LOG("[Settings] Load: bad value for [%s] %s = '%s'", currentSection, key, valueText);
                     continue;
                 }

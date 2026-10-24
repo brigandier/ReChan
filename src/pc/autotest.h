@@ -1,8 +1,12 @@
 #pragma once
+class Game;
 int AutoTest_VerifyLocalization(const char* outputDirectory);
 #if defined(RECHAN_VISUAL_TESTS)
 int AutoTest_VerifyEngineIntegration(const char* outputDirectory);
 int AutoTest_RenderMovieSubtitles(const char* movieDirectory, const char* outputDirectory);
+int AutoTest_VerifyRuntime(const char* outputDirectory);
+void AutoTest_PrepareExitScenario(Game& game, const char* scenario);
+void AutoTest_CheckShutdown(bool platformDestroyed);
 #endif
 #include "gen/common.h"
 

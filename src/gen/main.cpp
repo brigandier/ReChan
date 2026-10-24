@@ -24,6 +24,7 @@
 #include "gen/display.h"
 #include "snd/rsevent.h"
 #include "extra/fecustommenumgr.h"
+#include "extra/prompticons.h"
 #include "extra/assetexporter.h"
 #include "pc/apppaths.h"
 #include "pc/autotest.h"
@@ -46,6 +47,7 @@
 #include <filesystem>
 #include <string>
 #include <system_error>
+#include <memory>
 
 #if defined(RC_PLATFORM_SWITCH)
 #include <unistd.h>
@@ -141,8 +143,7 @@ static bool OnWndProc(const pddiWndMessage& msg) {
             break;
         case PDDI_WND_SCROLL:
             if (g_actionInput && g_feCustomMenuMgr && g_feCustomMenuMgr->IsActive()) {
-                const s32 dir = (msg.fparam2 > 0.0) ? 1 : -1;
-                g_actionInput->AddScrollDelta(dir);
+                g_actionInput->AddVerticalScroll(msg.fparam2);
             }
             break;
         default:
@@ -227,6 +228,9 @@ int main(int argc, char** argv) {
     if (argc >= 3 && std::strcmp(argv[1], "--test-engine-integration") == 0) {
         return AutoTest_VerifyEngineIntegration(argv[2]);
     }
+    if (argc >= 3 && std::strcmp(argv[1], "--test-runtime") == 0) {
+        return AutoTest_VerifyRuntime(argv[2]);
+    }
 #endif
 
     // Headless verification/export path used by automated round-trip checks
@@ -266,6 +270,9 @@ int main(int argc, char** argv) {
     init.xSize = JCS_TARGET_WIDTH;
     init.ySize = JCS_TARGET_HEIGHT;
     init.title = JCS_TITLE;
+#if defined(RECHAN_VISUAL_TESTS)
+    if (argc >= 2 && std::strcmp(argv[1], "--test-context-failure") == 0) init.xSize = 0;
+#endif
 
     tContext* ctx = platform->CreateContext(init);
     if (!ctx) {
@@ -283,6 +290,9 @@ int main(int argc, char** argv) {
         }
         consoleExit(NULL);
 #endif
+        tPlatform::Destroy();
+        LOG_ALWAYS("[main] Context initialization failed; platform released");
+        Log::Get().Shutdown();
         return 1;
     }
 
@@ -327,7 +337,8 @@ int main(int argc, char** argv) {
     rFrameCount = 0;
     rFrameCount60 = 0;
 
-    Game game;
+    auto gameOwner = std::make_unique<Game>();
+    Game& game = *gameOwner;
     if (!g_actionInput) {
         g_actionInput = new ActionInput();
     }
@@ -353,11 +364,17 @@ int main(int argc, char** argv) {
 #if defined(RECHAN_VISUAL_TESTS)
     if (argc >= 4 && std::strcmp(argv[1], "--test-movie-subtitles") == 0) {
         const int result = AutoTest_RenderMovieSubtitles(argv[2], argv[3]);
-        g_textManager->Shutdown();
+        gameOwner.reset();
         delete g_textManager;
         g_textManager = nullptr;
+#if CUSTOM_MENU
+        PromptIcons::Shutdown();
+#endif
+        delete g_actionInput;
+        g_actionInput = nullptr;
         platform->DestroyContext(ctx);
         tPlatform::Destroy();
+        Log::Get().Shutdown();
         return result;
     }
 #endif
@@ -373,6 +390,10 @@ int main(int argc, char** argv) {
 #endif
 
     game.SetState(GameState::Intro);
+#if defined(RECHAN_VISUAL_TESTS)
+    if (argc >= 3 && std::strcmp(argv[1], "--test-exit") == 0)
+        AutoTest_PrepareExitScenario(game, argv[2]);
+#endif
 
     p3d::context->SetClearColour(pddiColour(30, 30, 35));
 
@@ -484,14 +505,17 @@ int main(int argc, char** argv) {
     LOG_ALWAYS("[main] Main loop ended: windowClosed=%d state=%d",
                p3d::display->ShouldClose() ? 1 : 0, static_cast<int>(game.GetState()));
 
-    platform->DestroyContext(ctx);
-    tPlatform::Destroy();
+    // Game managers and font atlases require the live graphics context during destruction.
+    gameOwner.reset();
+    LOG_ALWAYS("[main] Game resources released");
 
     if (g_textManager) {
-        g_textManager->Shutdown();
         delete g_textManager;
         g_textManager = nullptr;
     }
+#if CUSTOM_MENU
+    PromptIcons::Shutdown();
+#endif
 
 #if AUTO_UPDATER
     if (g_autoUpdater) {
@@ -514,6 +538,15 @@ int main(int argc, char** argv) {
     ModLoader::Instance().Shutdown();
 #endif
 
+#if defined(RECHAN_VISUAL_TESTS)
+    AutoTest_CheckShutdown(false);
+#endif
+    platform->DestroyContext(ctx);
+    tPlatform::Destroy();
+#if defined(RECHAN_VISUAL_TESTS)
+    AutoTest_CheckShutdown(true);
+#endif
+    LOG_ALWAYS("[main] Platform resources released");
     LOG_ALWAYS("Clean shutdown");
     Log::Get().Shutdown();
 
