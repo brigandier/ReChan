@@ -186,6 +186,7 @@ static void KeyToLabel(s32 key, char* outLabel, s32 outLabelLen) {
     }
 
     outLabel[0] = '\0';
+    if (outLabelLen == 1) return;
 
     if (key >= KEY_A && key <= KEY_Z) {
         outLabel[0] = (char)key;
@@ -532,7 +533,7 @@ void ActionInput::SetMouseButtonBinding(Action action, s32 mouseButton) {
 }
 
 void ActionInput::SetKeyBindingSlot(Action action, s32 slot, int key) {
-    if (action < 0 || action >= ACTION_COUNT || !IsValidDesktopSlot(slot)) {
+    if (action < 0 || action >= ACTION_COUNT || !IsValidDesktopSlot(slot) || !IsValidKeyBinding(key)) {
         return;
     }
 
@@ -546,9 +547,7 @@ void ActionInput::SetMouseButtonBindingSlot(Action action, s32 slot, s32 mouseBu
         return;
     }
 
-    if (mouseButton < MouseBtn::Left || mouseButton > MouseBtn::Middle) {
-        mouseButton = MouseBtn::NONE;
-    }
+    if (mouseButton < MouseBtn::NONE || mouseButton > MouseBtn::Middle) return;
 
     bindings[action].keyboardKeys[slot] = 0;
     bindings[action].mouseButtons[slot] = mouseButton;
@@ -612,7 +611,7 @@ s32 ActionInput::GetGamepadButtonBinding(Action action) const {
 }
 
 s32 ActionInput::EncodeKeyboardBindingCode(s32 key) {
-    if (key <= 0) {
+    if (!IsValidKeyBinding(key)) {
         return 0;
     }
     return key;
@@ -625,8 +624,22 @@ s32 ActionInput::EncodeMouseBindingCode(s32 mouseButton) {
     return -(mouseButton + 1);
 }
 
+bool ActionInput::IsValidKeyBinding(s32 key) {
+    // GLFW key codes include gaps, international keys, F13-F25 and system modifiers.
+    return key == 0 || key == KEY_SPACE || key == KEY_APOSTROPHE
+        || (key >= KEY_COMMA && key <= KEY_9) || key == KEY_SEMICOLON || key == KEY_EQUAL
+        || (key >= KEY_A && key <= KEY_RIGHT_BRACKET) || key == KEY_GRAVE
+        || key == 161 || key == 162 || (key >= KEY_ESCAPE && key <= KEY_END)
+        || (key >= 280 && key <= 284) || (key >= KEY_F1 && key <= 314)
+        || (key >= KEY_KP_0 && key <= KEY_KP_EQUAL) || (key >= KEY_LEFT_SHIFT && key <= 348);
+}
+
+bool ActionInput::IsValidDesktopBindingCode(s32 code) {
+    return code >= 0 ? IsValidKeyBinding(code) : code >= -(MouseBtn::Middle + 1);
+}
+
 void ActionInput::SetDesktopBindingCode(Action action, s32 slot, s32 code) {
-    if (action < 0 || action >= ACTION_COUNT || !IsValidDesktopSlot(slot)) {
+    if (action < 0 || action >= ACTION_COUNT || !IsValidDesktopSlot(slot) || !IsValidDesktopBindingCode(code)) {
         return;
     }
 

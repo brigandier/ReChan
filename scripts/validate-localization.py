@@ -6,6 +6,26 @@ import unicodedata
 
 ROOT = Path(__file__).resolve().parents[1]
 
+def token_hash(token):
+    if '0' <= token[0] <= '9':
+        if token.lower().startswith('0x'):
+            value = int(token[2:], 16)
+        else:
+            value = int(token, 8 if token.startswith('0') else 10)
+        assert 0 <= value <= 0xffffffff, ('numeric token outside u32', token)
+        return value
+    value = 0
+    for byte in token.encode('utf-8'):
+        value = (value * 33 + byte) & 0xffffffff
+    return value
+
+def validate_hashes(entries, path):
+    hashes = {}
+    for token in entries:
+        value = token_hash(token)
+        assert value not in hashes, (path, 'xcHash collision', f'0x{value:08X}', hashes.get(value), token)
+        hashes[value] = token
+
 def catalog(path):
     result = {}
     pending = None
@@ -79,6 +99,7 @@ def main():
     controls = re.compile(r'%(?:\d+\$)?[-+0 #]*\d*(?:\.\d+)?[a-zA-Z%]|<[^>]+>')
     for path in sorted((ROOT/'res/pc/text').glob('*.txt')):
         entries = catalog(path)
+        validate_hashes(entries, path)
         assert entries.keys() == base.keys(), (path, 'token mismatch', entries.keys() ^ base.keys())
         for key, text in entries.items():
             assert controls.findall(text) == controls.findall(base[key]), (path, key, 'format mismatch')

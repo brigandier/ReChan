@@ -64,7 +64,8 @@ private:
         std::string text = {};
     };
 
-    bool LoadTextFile(const char* path);
+    bool LoadLanguage(GameLanguage language);
+    bool LoadTextFile(const char* path, std::vector<StringEntry>& entries);
     bool TryParseTokenHash(const std::string& token, u32* outHash);
     void ClearStrings();
 

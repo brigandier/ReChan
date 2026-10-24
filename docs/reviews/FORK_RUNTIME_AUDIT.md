@@ -1,5 +1,7 @@
 # Auditoria complementar da fork — execução, entrada e localização
 
+> Os tópicos iniciais abaixo preservam o levantamento estático. Os resultados de reprodução, correções e limitações estão na seção **Resultados da auditoria**, ao final. Uma hipótese inicial não equivale a um defeito confirmado.
+
 > Referência de trabalho: `main` em `e137c55a0a1b88218210a7d43ad8c8a54f4ba735`. Esta é uma análise estática dos arquivos **desta fork**, com leitura dos fluxos de inicialização, destruição, entrada, localização, legendas e controladores. Não executei testes nativos nem partidas do jogo. O documento registra evidências de código e hipóteses a reproduzir, sem antecipar conclusões sobre impacto prático.
 
 ## Objetivo e delimitação
@@ -112,3 +114,94 @@ Esta revisão prioriza comportamentos observáveis **na minha fork** e as integr
 - Falha na localização ou SRT externo tem resultado previsível e documentado.
 - Múltiplos controles não cruzam feedback em rotas suportadas.
 - Todos os testes e recursos previamente aprovados permanecem funcionais.
+
+## Resultados da auditoria — 2026-10-24
+
+Base examinada: `e137c55a0a1b88218210a7d43ad8c8a54f4ba735`. O documento inicial foi registrado em `beca5c7`.
+
+| Prioridade | Item | Classificação | Resultado |
+| --- | --- | --- | --- |
+| P0 | Ordem de destruição de Game, fontes e contexto | CONFIRMADO | Recursos da aplicação são destruídos antes da plataforma; log encerra por último |
+| P1 | Domínio numérico dos bindings e slots | CONFIRMADO | Validação antes de negar, subtrair ou converter; entradas inválidas preservam bindings válidos |
+| P1 | Buffer de um byte em KeyToLabel | CONFIRMADO | Capacidade mínima produz somente terminador; demais rótulos preservados |
+| P1 | Par de alocação nas células da interface | CONFIRMADO | ASan identificou `new[]` com `delete`; corrigido para `delete[]` |
+| P2 | Scroll horizontal tratado como vertical | CONFIRMADO | Componente vertical zero não contribui para a navegação |
+| P2 | Falha na troca de idioma | CONFIRMADO | Carga transacional, rollback e fallback inglês para entradas ausentes |
+| P2 | SRT externo com linhas excessivas e rejeição silenciosa | CONFIRMADO | Entradas inválidas são contadas/diagnosticadas; apresentação simultânea limitada |
+| P2 | GUID ambíguo na seleção normal SDL | DESCARTADO | O caminho normal seleciona objetos/instâncias; testes com GUIDs idênticos passaram |
+| P2 | GUID ambíguo no fallback GLFW/SDL | CONFIRMADO | Correspondência única obrigatória; instância SDL usada para reutilização |
+| P2 | Subsistemas SDL mantidos após shutdown | CONFIRMADO | Referências inicializadas pelo backend são encerradas; referências externas preservadas |
+| P2 | Caches estáticos de texturas de prompts | CONFIRMADO | Liberação explícita e idempotente antes da destruição do contexto |
+| P3 | Colisão nos identificadores atuais | DESCARTADO | 212 identificadores por idioma sem colisões; acrescentada prevenção para alterações futuras |
+| QA | Touchpad físico, dois controles iguais, Steam Input e Linux | PENDENTE | Testes virtuais/Windows não certificam esses ambientes |
+
+### Ciclo de vida
+
+`main()` destruía o contexto antes de `Game::~Game()` e do backend de fontes. A inspeção confirmou liberações de texturas e programas OpenGL nesses destruidores. A execução original de saída de fase retornou zero; isso não comprovava validade do contexto durante a liberação.
+
+O proprietário de `Game` agora é destruído explicitamente antes das fontes, caches e plataforma. `Game::~Game()` chama `Close()` enquanto todos os managers ainda existem, descarrega referências do mundo e só depois elimina os managers. O encerramento utiliza `AI::UnPopulate(1)` para remover o jogador das listas antes de destruí-lo. Na validação da ordem intermediária, a exclusão direta do jogador provocou um use-after-free reproduzido pelo ASan em `ccMinList::RemNode`, através de `World::Unload`; a ordem final eliminou esse acesso. O comportamento da AI durante o jogo não foi alterado.
+
+O caminho de falha na criação do contexto libera a plataforma e encerra o log. O caminho opcional de comparação de legendas também libera seu Game não aberto, fontes, caches e input antes do contexto. Workers existentes são encerrados antes da plataforma e do log; o áudio é encerrado pelo manager existente, sem duplicar seu shutdown.
+
+Os testes gráficos verificam que os proprietários de Game/texto/input já desapareceram e o áudio está parado enquanto o contexto GLFW ainda está corrente. Depois da plataforma, verificam os ponteiros globais nulos. Foram exercitados: saída por página de encerramento do menu, fechamento no menu, saída de fase, fechamento durante fase, fechamento durante PROLOG e falha controlada de criação da janela. Sucesso retorna zero; a falha de inicialização retorna 1. Menu, fase e cutscene também foram executados com ASan.
+
+A inspeção SDL identificou um DualSense conectado durante a bateria final. Isso confirma execução com controle presente, sem constituir aprovação auditiva/visual de vibração ou LEDs nem teste físico de dois controles iguais.
+
+O ASan encontrou ainda um par `new u8[16384]`/`delete` em `xcCellImage::Decode()`. A única alteração no decodificador é `delete[] expandBuf`; formatos, limites e algoritmo não foram redesenhados. Os testes finais ASan utilizam `alloc_dealloc_mismatch=1`, sem suprimir esse diagnóstico.
+
+ASan não comprova ausência de vazamentos de GPU, e as bibliotecas/driver não estão integralmente instrumentados. Não foram injetadas falhas em todas as alocações possíveis.
+
+### Entrada, buffers e menus
+
+Os testes anteriores às correções falharam para `INT_MIN`, valores extremos, códigos inexistentes, perda de bindings válidos e canário de buffer. A validação agora ocorre antes da negação de códigos negativos. Zero continua desassociando; -1, -2 e -3 preservam a codificação do mouse. As faixas GLFW válidas incluem teclas internacionais, funções estendidas, teclado numérico e modificadores, rejeitando lacunas numéricas.
+
+`ParseSettingValue()` e `<BND:...>` verificam consumo integral, `ERANGE` e limites antes da conversão. Sufixos de slots são verificados antes de subtrair um. Booleanos continuam disponíveis para configurações booleanas; bindings e slots exigem valores numéricos. Entradas inválidas não substituem bindings anteriores válidos. A escrita de configurações não foi modificada.
+
+Rótulos foram testados com capacidades 0, 1, 2 e 16, ponteiro nulo, letras, dígitos, funções, teclas nomeadas, mouse e slots vazios. Buffers de heap com capacidade exata foram exercitados para todas as teclas aceitas sob ASan. Não foi identificado um consumidor de produção usando capacidade 1; o defeito confirmado era do contrato da função. O ASan do MSVC não detecta overflow assinado: a exclusão desse caminho é demonstrada pela validação de domínio e pelas regressões numéricas.
+
+O teste de scroll chama o callback GLFW realmente registrado, com `(1,0)`, `(-1,0)`, `(0,0)`, `(0,1)`, `(0,-1)` e movimentos mistos fracionários, com menu ativo. Os deltas observados correspondem exclusivamente ao componente vertical. Teste físico de touchpad permanece pendente.
+
+### Catálogos e legendas
+
+O novo catálogo é montado em armazenamento temporário: inglês como base e o idioma selecionado como sobreposição. Somente uma carga bem-sucedida e não vazia confirma idioma, revisão e strings. Falhas preservam o catálogo anterior, inclusive seus ponteiros emprestados. Entradas ausentes usam inglês. Catálogos vazios e token final sem texto são rejeitados; hashes numéricos têm limites verificados.
+
+Fixtures cobrem arquivo ausente, vazio, caminho ilegível, catálogo incompleto, falha ao recarregar o fallback inglês, nova tentativa após falha e shutdown/recarga. Os seis idiomas e seus round-trips de configurações passaram. Sem inglês e sem catálogo anterior no primeiro carregamento, não há como sintetizar as strings da fork: permanece o fallback original existente, com diagnóstico de falha. Falhas parciais de leitura do sistema operacional não foram injetadas separadamente; o leitor existente rejeita leituras curtas antes do commit.
+
+O aproveitamento de cues válidos de um SRT misto é uma política de recuperação, não um erro por si só. Foram corrigidos a ausência de diagnóstico e o número ilimitado de linhas-fonte. Cues inválidos são ignorados e contados; cues com mais de duas linhas-fonte são rejeitados. UTF-8 inválido e arquivos acima do limite continuam rejeitando e limpando a pista. Sobreposições preservam ordem estável e cues completos até quatro linhas-fonte simultâneas; cues excedentes são omitidos sem cortar frases. O comportamento anterior de sobreposições normais permanece.
+
+Testes cobrem timestamps inválidos/invertidos, blocos malformados, índice ausente, conteúdo misto, excesso de linhas, inícios repetidos, sobreposições, UTF-8, vazio, limpeza/repetição e independência do FPS. Os 30 SRTs distribuídos são aceitos sem rejeições, com 100 repetições por arquivo. Fonte Menu, RGB (215,135,0), contorno, escala 0,35, posição e alinhamento não foram alterados. Nenhum texto, tempo ou arquivo SRT foi editado.
+
+O idioma da pista é selecionado ao abrir o filme. A reprodução bloqueante não oferece menu de idioma; a próxima abertura utiliza a seleção atual. Não foi introduzida troca de idioma no meio da cutscene. O orçamento de linhas considera linhas-fonte; textos externos excepcionalmente longos ainda podem ocupar mais linhas após quebra visual pela fonte.
+
+### Controles e recursos estáticos
+
+O caminho normal SDL foi testado com dois PS4 e dois PS5 virtuais de GUID idêntico: seleção por instância, vibração, LED, desconexão e reconexão com nova instância. Também foram preservados os testes de Xbox/PlayStation, indicador de jogador e controles sem vibração/LED.
+
+O fallback é alcançável quando GLFW possui mapeamento e SDL enxerga apenas joysticks sem mapeamento. Dois dispositivos virtuais idênticos reproduziram a aceitação de uma associação ambígua. Índices GLFW/SDL são independentes; o fallback agora exige GUID único, ou exatamente um dispositivo quando não há GUID, e reutiliza a instância correspondente. Não escolhe mais arbitrariamente o primeiro dispositivo com vibração. Um joystick único conserva feedback. Dispositivos ambíguos podem continuar com comandos e seleção manual de prompts, mas sem feedback até haver mapeamento SDL confiável. Não foi criado outro sistema de entrada.
+
+Um teste também reproduziu subsistemas SDL ainda inicializados após o shutdown do backend. O backend passa a encerrar apenas as referências de subsistemas que inicializou. Referências externas e reabertura permanecem funcionais. Testes físicos com dois controles iguais, Steam Input e diferentes ordens de enumeração continuam pendentes.
+
+Os caches estáticos de prompts conservavam referências de texturas sem liberação no encerramento. `PromptIcons::Shutdown()` limpa ambos antes da plataforma. Um teste gráfico mantém referência própria e confirma exatamente uma liberação do cache, mesmo chamando shutdown duas vezes.
+
+### Hashes e preservação de escopo
+
+Não havia colisão nos 212 tokens de cada catálogo nem verificação preventiva equivalente no validador examinado. A verificação adicionada reproduz o algoritmo `xcHash`, com bytes sem sinal e interpretação dos tokens numéricos, e identifica ambos os tokens e o hash em colisão. Quatro testes Python cobrem vetores, nomes distintos, colisão sintética e alias numérico; uma asserção nativa confere o vetor de `FE_SUB` contra `xcHash()`.
+
+Os catálogos não foram reorganizados nem editados. Recursos gráficos, fontes, traduções, HUD, salvamentos, ModLoader, updater, importação e arquivos audiovisuais permanecem fora das alterações desta auditoria. A integração com os outros trabalhos deve preservar as verificações de ordem dos catálogos já existentes, além desta verificação complementar de hashes.
+
+### Reprodução dos testes
+
+Na raiz do checkout, utilizando um Developer PowerShell com a ferramenta instalada:
+
+```powershell
+.\premake5.cmd --tests vs2022
+msbuild build/rechan.sln /m:4 /p:Configuration=Release /p:Platform=x64
+.\scripts/run-support-tests.ps1 -Python python
+.\scripts/run-runtime-tests.ps1
+```
+
+Os testes de runtime trabalham em `build/tests/runtime` e executam a partir de `res`, sem substituir catálogos distribuídos ou saves. Os cenários gráficos opcionais exigem um runtime isolado com os recursos originais locais. Nesse runtime, executar o binário de testes com `--test-exit menu`, `--test-exit window`, `--test-exit movie`, `--autotest 0 --frames 30 --fps 60` ou `--test-context-failure`. No cenário de filme, fechar a janela durante PROLOG. O teste de menu exercita a página de encerramento real; não substitui toda a navegação humana até ela.
+
+Para ASan, compilar `ReleaseASan` e executar `rechan-asan.exe` e `support-tests-asan.exe`, com o runtime ASan instalado no PATH e `ASAN_OPTIONS=alloc_dealloc_mismatch=1:halt_on_error=1`. A distribuição normal deve ser gerada novamente sem `--tests`.
+
+Compilações Release x64 e ASan foram executadas localmente. Avisos C4244 preexistentes permanecem fora do escopo. Não houve build Linux, avaliação visual definitiva ou certificação física de todas as revisões de controles. Testes curtos de fase não aprovam gameplay, combate ou desempenho de carregamento. Não há publicação de release como parte desta auditoria.

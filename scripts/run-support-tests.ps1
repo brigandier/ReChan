@@ -5,6 +5,8 @@ Push-Location $Root
 try {
     & $Python scripts/validate-localization.py
     if ($LASTEXITCODE -ne 0) { throw 'Catalog validation failed.' }
+    & $Python -m unittest discover -s tests -p test_localization_hashes.py
+    if ($LASTEXITCODE -ne 0) { throw 'Localization hash tests failed.' }
     & build/tests/support-tests.exe
     if ($LASTEXITCODE -ne 0) { throw 'Subtitle/prompt tests failed. Generate with premake5 --tests vs2022 and build Release first.' }
     & build/tests/gamepad-tests.exe

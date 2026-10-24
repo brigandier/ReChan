@@ -154,6 +154,7 @@ public:
 
     // Mouse wheel accumulation (fed by window proc)
     void AddScrollDelta(s32 delta) { scrollDelta += delta; }
+    void AddVerticalScroll(double delta) { AddScrollDelta((delta > 0.0) - (delta < 0.0)); }
     s32 ConsumeScrollDelta();
 
     // Rebinding
@@ -172,6 +173,8 @@ public:
     //  0 = unbound, >0 = keyboard key code, <0 = mouse button code (-1-left, -2-right, -3-middle)
     static s32 EncodeKeyboardBindingCode(s32 key);
     static s32 EncodeMouseBindingCode(s32 mouseButton);
+    static bool IsValidKeyBinding(s32 key);
+    static bool IsValidDesktopBindingCode(s32 code);
     void SetDesktopBindingCode(Action action, s32 slot, s32 code);
     s32 GetDesktopBindingCode(Action action, s32 slot) const;
     void GetDesktopBindingLabel(Action action, s32 slot, char* outLabel, s32 outLabelLen) const;

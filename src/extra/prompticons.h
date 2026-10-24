@@ -12,6 +12,8 @@
 #include "pddi/pdditex.h"
 #include <cstdlib>
 #include <cstring>
+#include <cerrno>
+#include <limits>
 
 class PromptIcons {
 public:
@@ -133,8 +135,11 @@ public:
         token[tokenLen] = '\0';
 
         char* parseEnd = nullptr;
+        errno = 0;
         const long parsedCode = strtol(token, &parseEnd, 10);
-        if (!parseEnd || *parseEnd != '\0') {
+        if (parseEnd == token || *parseEnd != '\0' || errno == ERANGE
+            || parsedCode < std::numeric_limits<s32>::min() || parsedCode > std::numeric_limits<s32>::max()
+            || !ActionInput::IsValidDesktopBindingCode((s32)parsedCode)) {
             return false;
         }
 
@@ -196,6 +201,7 @@ public:
 
     static bool ResolveDesktopBindingCodePrompt(s32 code, ResolvedPrompt& out) {
         out = {};
+        if (!ActionInput::IsValidDesktopBindingCode(code)) return false;
 
         if (code == 0) {
             CopyText(out.fallback, (s32)sizeof(out.fallback), "-");
@@ -762,6 +768,13 @@ private:
     }
 
 public:
+    static void Shutdown() {
+        ResetGamepadSheet();
+        SheetState& keyboard = GetKeyboardSheet();
+        if (keyboard.tex) keyboard.tex->Release();
+        keyboard = SheetState{};
+    }
+
     // Call after ControllerPromptManager::SetStyle() reports a change, so the
     // next gamepad button prompt reloads from the new style's sheet instead
     // of keeping the old one cached.

@@ -124,6 +124,70 @@ int main(int argc, char** argv) {
         return 2;
     }
     assert(!glGamepadPollState(buttons, axes));
+    {
+        RumbleState first, second;
+        SDL_VirtualJoystickDesc desc{};
+        desc.version = SDL_VIRTUAL_JOYSTICK_DESC_VERSION;
+        desc.type = SDL_JOYSTICK_TYPE_UNKNOWN;
+        desc.naxes = 6;
+        desc.nbuttons = 15;
+        desc.name = "Identical unmapped joystick";
+        desc.Rumble = Rumble;
+        desc.userdata = &first;
+        const int a = SDL_JoystickAttachVirtualEx(&desc);
+        desc.userdata = &second;
+        const int b = SDL_JoystickAttachVirtualEx(&desc);
+        assert(a >= 0 && b >= 0 && !SDL_IsGameController(a) && !SDL_IsGameController(b));
+        char guid[33];
+        SDL_JoystickGetGUIDString(SDL_JoystickGetDeviceGUID(a), guid, sizeof(guid));
+        assert(!glGamepadPollState(buttons, axes));
+        assert(!glGamepadRumbleUpdateActive(a, guid));
+        assert(!glGamepadRumbleSet(1, 1) && !first.calls && !second.calls);
+        SDL_JoystickDetachVirtual(b);
+        assert(glGamepadRumbleUpdateActive(a, guid));
+        assert(glGamepadRumbleSet(0.5f, 1) && first.high == 65535 && !second.calls);
+        glGamepadShutdown();
+        SDL_JoystickDetachVirtual(a);
+        std::cout << "PASS GLFW/SDL fallback: ambiguous identical GUIDs rejected; unique device retains rumble\n";
+    }
+    for (const char* type : {"PS4", "PS5"}) {
+        glGamepad host;
+        RumbleState first, second, reconnected;
+        const int a = Attach("Identical PlayStation", type, first);
+        const int b = Attach("Identical PlayStation", type, second);
+        const auto guidA = SDL_JoystickGetDeviceGUID(a), guidB = SDL_JoystickGetDeviceGUID(b);
+        assert(std::memcmp(&guidA, &guidB, sizeof(guidA)) == 0);
+        auto* padA = SDL_JoystickOpen(a);
+        auto* padB = SDL_JoystickOpen(b);
+        const auto oldInstance = SDL_JoystickInstanceID(padB);
+        host.Poll();
+        assert(host.SetVibration(0.5f, 1) && first.high == 65535 && !second.calls);
+        assert(host.SetLED(255, 0, 0));
+        SDL_JoystickSetVirtualButton(padB, 0, 1);
+        host.Poll();
+        assert(first.high == 0 && host.SetVibration(1, 0.5f) && second.low == 65535);
+        assert(host.SetLED(0, 255, 0) && second.green == 255 && first.blue == 255);
+        SDL_JoystickDetachVirtual(b);
+        host.Poll();
+        assert(host.SetVibration(0.5f, 1) && first.high == 65535);
+        SDL_JoystickClose(padB);
+        const int c = Attach("Identical PlayStation", type, reconnected);
+        auto* padC = SDL_JoystickOpen(c);
+        assert(SDL_JoystickInstanceID(padC) != oldInstance);
+        host.Poll();
+        SDL_JoystickSetVirtualButton(padC, 1, 1);
+        host.Poll();
+        assert(host.SetVibration(1, 0) && reconnected.low == 65535 && first.high == 0);
+        assert(host.SetLED(255, 128, 0) && reconnected.red == 255);
+        if (std::strcmp(type, "PS5") == 0)
+            assert(reconnected.playerIndex == 0 && first.playerIndex == -1);
+        glGamepadShutdown();
+        SDL_JoystickDetachVirtual(c);
+        SDL_JoystickDetachVirtual(a);
+        SDL_JoystickClose(padC);
+        SDL_JoystickClose(padA);
+        std::cout << "PASS identical " << type << " GUIDs: instance selection, rumble, LED, detach and new-instance reconnection\n";
+    }
     for (auto type : {"PS3", "PS4", "PS5", "Xbox360", "XboxOne", "SwitchPro", "JoyConLeft", "JoyConRight", "JoyConPair", "Virtual", "Unknown"}) {
         RumbleState rumble;
         const int index = Attach(type, type, rumble);
@@ -247,7 +311,15 @@ int main(int argc, char** argv) {
         SDL_JoystickDetachVirtual(index);
         host.Poll();
     }
+    assert(SDL_WasInit(SDL_INIT_GAMECONTROLLER) != 0);
     SDL_QuitSubSystem(SDL_INIT_GAMECONTROLLER);
+    assert(SDL_WasInit(SDL_INIT_GAMECONTROLLER | SDL_INIT_JOYSTICK) == 0);
+    glGamepadPollState(buttons, axes);
+    assert(SDL_WasInit(SDL_INIT_GAMECONTROLLER | SDL_INIT_JOYSTICK) != 0);
+    glGamepadShutdown();
+    assert(SDL_WasInit(SDL_INIT_GAMECONTROLLER | SDL_INIT_JOYSTICK) == 0);
+    glGamepadShutdown();
+    std::cout << "PASS SDL shutdown: owned subsystems released, external ownership preserved, repeat shutdown safe\n";
     std::cout << "PASS multiple controllers: active-device switching and held-button stability\n";
     std::cout << "PASS querying unsupported rumble does not change active input or family\n";
     std::cout << "PASS LED: capability fallback, caching, transient failure, hotplug, device switching and rumble coexistence\n";

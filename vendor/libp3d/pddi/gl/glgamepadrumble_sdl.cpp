@@ -62,6 +62,7 @@ struct PolledController {
 static std::vector<PolledController> g_polledControllers;
 static char g_activeGuid[64] = {};
 static bool g_sdlMainReady = false;
+static Uint32 g_ownedSubsystems = 0;
 static bool g_ledAttempted = false;
 static bool g_ledSucceeded = false;
 static bool g_ledOwned = false;
@@ -127,6 +128,9 @@ void glGamepadShutdown() {
     CloseActiveController();
     for (auto& device : g_polledControllers) SDL_GameControllerClose(device.controller);
     g_polledControllers.clear();
+    if (g_ownedSubsystems & SDL_INIT_GAMECONTROLLER) SDL_QuitSubSystem(SDL_INIT_GAMECONTROLLER);
+    if (g_ownedSubsystems & SDL_INIT_JOYSTICK) SDL_QuitSubSystem(SDL_INIT_JOYSTICK);
+    g_ownedSubsystems = 0;
 }
 
 static bool BindControllerAtIndex(int sdlIndex, const char* expectedGuid, bool requireGuidMatch) {
@@ -219,10 +223,11 @@ static bool EnsureSDLGameControllerSubsystem() {
         if (SDL_InitSubSystem(SDL_INIT_JOYSTICK) != 0) {
             return false;
         }
+        g_ownedSubsystems |= SDL_INIT_JOYSTICK;
     }
 
     if ((SDL_WasInit(SDL_INIT_GAMECONTROLLER) & SDL_INIT_GAMECONTROLLER) == 0) {
-        (void)SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER);
+        if (SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER) == 0) g_ownedSubsystems |= SDL_INIT_GAMECONTROLLER;
     }
 
     return true;
@@ -382,84 +387,40 @@ GamepadFamily glGamepadGetFamily() {
 }
 
 bool glGamepadRumbleUpdateActive(int glfwGamepadIndex, const char* glfwGuid) {
+    // GLFW and SDL enumerate independently; neither an index nor a model GUID
+    // distinguishes identical devices. Only a unique match is safe for feedback.
+    (void)glfwGamepadIndex;
     const bool hasGuid = glfwGuid && glfwGuid[0] != '\0';
-
-    if (g_activeController || g_activeJoystick) {
-        if (hasGuid && GuidEquals(g_activeGuid, glfwGuid)) {
-            return true;
-        }
-
-        if (!hasGuid && ActiveBindingCanRumble()) {
-            return true;
-        }
-    }
-
-    CloseActiveController();
-
     if (!EnsureSDLGameControllerSubsystem()) {
+        CloseActiveController();
         return false;
     }
 
     SDL_GameControllerUpdate();
 
     const int joystickCount = SDL_NumJoysticks();
-    if (joystickCount <= 0) {
+    int match = -1;
+    for (int i = 0; i < joystickCount; i++) {
+        char guid[64] = {};
+        SDL_JoystickGetGUIDString(SDL_JoystickGetDeviceGUID(i), guid, sizeof(guid));
+        if ((hasGuid && GuidEquals(guid, glfwGuid)) || (!hasGuid && joystickCount == 1)) {
+            if (match >= 0) {
+                CloseActiveController();
+                return false;
+            }
+            match = i;
+        }
+    }
+    if (match < 0) {
+        CloseActiveController();
         return false;
     }
-
-    if (glfwGamepadIndex >= 0) {
-        if (BindControllerAtIndex(glfwGamepadIndex, glfwGuid, hasGuid)) {
-            return true;
-        }
-        if (BindJoystickAtIndex(glfwGamepadIndex, glfwGuid, hasGuid)) {
-            return true;
-        }
+    if (g_activeJoystick && SDL_JoystickGetAttached(g_activeJoystick)
+        && SDL_JoystickInstanceID(g_activeJoystick) == SDL_JoystickGetDeviceInstanceID(match)) {
+        return true;
     }
-
-    if (hasGuid) {
-        for (int i = 0; i < joystickCount; i++) {
-            if (i == glfwGamepadIndex) {
-                continue;
-            }
-
-            if (BindControllerAtIndex(i, glfwGuid, true)) {
-                return true;
-            }
-
-            if (BindJoystickAtIndex(i, glfwGuid, true)) {
-                return true;
-            }
-        }
-    }
-
-    if (joystickCount == 1) {
-        if (BindControllerAtIndex(0, nullptr, false)) {
-            return true;
-        }
-
-        if (BindJoystickAtIndex(0, nullptr, false)) {
-            return true;
-        }
-    }
-
-    // Final fallback: select the first SDL device that confirms rumble support.
-    for (int i = 0; i < joystickCount; i++) {
-        if (BindControllerAtIndex(i, nullptr, false)) {
-            if (ActiveBindingCanRumble()) {
-                return true;
-            }
-            CloseActiveController();
-        }
-
-        if (BindJoystickAtIndex(i, nullptr, false)) {
-            if (ActiveBindingCanRumble()) {
-                return true;
-            }
-            CloseActiveController();
-        }
-    }
-
-    return false;
+    CloseActiveController();
+    return BindControllerAtIndex(match, glfwGuid, hasGuid) || BindJoystickAtIndex(match, glfwGuid, hasGuid);
 }
 
 bool glGamepadRumbleSupports() {

@@ -42,6 +42,17 @@ int main() {
     assert(subtitles.Parse("1\n00:00:01,000 --> 00:00:02,000\nValid\n\n"
         "2\n00:00:02,000 -> 00:00:03,000\nBad\n"));
     assert(subtitles.Entries().size() == 1);
+    assert(subtitles.RejectedCueCount() == 1);
+    assert(subtitles.Parse("1\n00:00:01,000 --> 00:00:02,000\nValid\n\n"
+        "2\n00:00:01,000 --> 00:00:02,000\nA\nB\nC\n"));
+    assert(subtitles.Entries().size() == 1 && subtitles.RejectedCueCount() == 1);
+    assert(subtitles.Parse("1\n00:00:01,000 --> 00:00:03,000\nA\nB\n\n"
+        "2\n00:00:01,000 --> 00:00:03,000\nC\nD\n\n"
+        "3\n00:00:01,000 --> 00:00:03,000\nE\nF\n"));
+    assert(subtitles.TextAt(1) == "A\nB\nC\nD");
+    assert(subtitles.Parse("1\n00:00:01,000 --> 00:00:02,000\nValid\n\n"
+        "2\n00:00:02,000 --> 00:00:03,000\nLast\n"));
+    assert(subtitles.RejectedCueCount() == 0 && subtitles.TextAt(2) == "Last");
     subtitles.Clear();
     assert(subtitles.Entries().empty() && subtitles.TextAt(1.0).empty());
     assert(!subtitles.Parse("broken"));
@@ -58,6 +69,7 @@ int main() {
                 subtitles.Clear();
             }
             subtitles.Parse(contents);
+            assert(subtitles.RejectedCueCount() == 0);
             std::cout << "PASS " << locale << "/" << name << ": " << subtitles.Entries().size() << " cues, 100 replays\n";
         }
     }
