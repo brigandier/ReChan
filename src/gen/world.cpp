@@ -1862,7 +1862,8 @@ static pddiPrimBuffer* ParseDynGeoPrims(
     std::vector<u32>* outPrimMaterialUID,
     std::vector<u8>* outPrimCmd,
     std::vector<u16>* outPrimUVWords,
-    std::vector<u32>* outPrimPacketOffset) {
+    std::vector<u32>* outPrimPacketOffset,
+    std::vector<GeoBlendRange>* outBlendRanges) {
     if (outUsesSemiTrans) {
         *outUsesSemiTrans = false;
     }
@@ -2010,6 +2011,7 @@ static pddiPrimBuffer* ParseDynGeoPrims(
             }
         }
 
+        const u32 firstIndex = static_cast<u32>(idxBuf.size());
         u16 base = static_cast<u16>(vertBuf.size());
         switch (primCmd) {
             case 0x30:
@@ -2073,6 +2075,20 @@ static pddiPrimBuffer* ParseDynGeoPrims(
 
             default:
                 break;
+        }
+
+        const u32 indexCount = static_cast<u32>(idxBuf.size()) - firstIndex;
+        if (outBlendRanges && indexCount != 0) {
+            const bool semiTrans = (material.primCmd & 2u) != 0;
+            const u8 mode = semiTrans ? static_cast<u8>((material.tpage >> 5) & 3u) : 0;
+            if (!outBlendRanges->empty()
+                && outBlendRanges->back().semiTrans == semiTrans
+                && outBlendRanges->back().semiTransMode == mode) {
+                outBlendRanges->back().indexCount += indexCount;
+            }
+            else {
+                outBlendRanges->push_back({ firstIndex, indexCount, semiTrans, mode });
+            }
         }
     }
 
@@ -2332,6 +2348,7 @@ static void LoadGeoPair(
                         std::vector<u8> dynamicPrimCmd;
                         std::vector<u16> dynamicPrimUVWords;
                         std::vector<u32> dynamicPrimPacketOffset;
+                        std::vector<GeoBlendRange> blendRanges;
                         pddiPrimBuffer* buffer = ParseDynGeoPrims(
                             permData + permCursor,
                             chunkPermSize,
@@ -2346,12 +2363,14 @@ static void LoadGeoPair(
                             &dynamicPrimMaterialUID,
                             &dynamicPrimCmd,
                             &dynamicPrimUVWords,
-                            &dynamicPrimPacketOffset);
+                            &dynamicPrimPacketOffset,
+                            &blendRanges);
                         if (buffer) {
                             OriginalGeo* original = new OriginalGeo();
                             original->nameCRC = modelHash ? modelHash : p3dHash(names[0].c_str());
                             original->SetStoreID(static_cast<s8>(storeId));
                             original->meshBuffer = buffer;
+                            original->blendRanges = std::move(blendRanges);
                             original->primGeom = CloneRawPrimGeom(permData + permCursor, chunkPermSize);
                             if (!original->primGeom) {
                                 original->primGeom = CloneDynGeoVertexPrimGeom(permData + permCursor, chunkPermSize);
@@ -4898,8 +4917,6 @@ s32 DeletePlayerBlendAndAnimData() {
 // PSX: ResetLevel__5World (WORLD.CPP:1918, 0x80046DE0)
 void World::ResetLevel() {
     MARKFUNCTION(0x80046DE0);
-
-    pendingPlayerReset = true;
 
     if (Player::s_player) {
         Player::s_player->checkpoint.SetValidState(0);

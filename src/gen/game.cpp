@@ -2189,9 +2189,6 @@ bool Game::gsDetermineNextGameState(Game* game) {
             game->SetState(GameState::EndGame);
         }
         else {
-            if (World* world = game->GetWorld()) {
-                world->RequestPlayerResetOnLoad();
-            }
             game->SetState(GameState::QueuePetalLoad);
         }
     }

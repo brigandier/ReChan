@@ -5,6 +5,7 @@
 #include "ai/door.h"
 #include "ai/generator.h"
 #include "ai/player.h"
+#include "ai/platform.h"
 #include "extra/modloader.h"
 #include "fe/hud.h"
 #include "gen/ai.h"
@@ -14,13 +15,18 @@
 #include "gen/display.h"
 #include "gen/game.h"
 #include "gen/model.h"
+#include "gen/levelmgr.h"
+#include "gen/weffect.h"
 #include "gen/time.h"
 #include "p3d/flip.h"
 #include "p3d/hash.h"
+#include "pddi/pddi.h"
 #include "snd/rsdworld.h"
+#include "snd/platsnd.h"
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -98,8 +104,9 @@ static void TestEncounters() {
 static void TestAnimation() {
     STreeData tree;
     tree.numJoints = tree.numMapEntries = 1;
-    tree.joints = new STreeJoint[1]{};
-    tree.jointOrderMap = new u32[1]{};
+    tree.joints = static_cast<STreeJoint*>(std::calloc(1, sizeof(STreeJoint)));
+    tree.jointOrderMap = static_cast<u32*>(std::calloc(1, sizeof(u32)));
+    Check(tree.joints && tree.jointOrderMap, "skeleton fixture allocation failed");
     std::array<u32, 8> raw{};
     raw[2] = 2; raw[3] = 5; raw[4] = 6;
     ((u8*)raw.data())[20] = 0;
@@ -136,9 +143,16 @@ static void TestAnimation() {
 static void TestBossAndSpatialAudio() {
     LVector pos{1000, 0, 1000};
     Player player(&pos);
+    HUD hud;
+    Humanoid enemy(&pos, 1);
+    hud.SetFoe(&enemy);
+    Check(hud.currentFoe == &enemy, "enemy no longer owns its health bar");
+    hud.SetFoe(&player);
+    hud.SetFoe(nullptr);
+    Check(hud.currentFoe == &enemy, "player pickup replaced the enemy health bar");
     Grontar boss(&pos);
     boss.commandBits = 1 << GA_DIVE_ROLL;
-    boss.SetActionState(AS_STRAFE, 0);
+    boss.SetActionState(AS_DIVE_ROLL, 0);
     Check(boss.stateDispatch == SD_GRONTAR_COMBO, "Barney combo request lost its dispatch");
     boss.ProcessAction();
     boss.commandBits = 0;
@@ -166,7 +180,57 @@ static void TestBossAndSpatialAudio() {
     rsdWorld::ComputeObjectVolumes(10000, &source, left, right, 0);
     Check(!left && !right, "distant sound did not attenuate");
     std::puts("PASS Barney combo/strafe routing, missing zone, player-centered audio, opposite-source stereo and distance attenuation");
+    std::puts("PASS enemy health bar: NPC selection retained across player and null targets");
 }
+
+static void TestPlatformMaterials() {
+    LVector pos{};
+    Platform platform(&pos, 201);
+    Check(platform.GetFloorMaterial() == 2, "platform without sound definition must default to metal");
+    CPlatformSound sound;
+    platform.platformSound = &sound;
+    for (s32 material : {0, 1, 2, 3}) {
+        sound.material = material;
+        Check(platform.GetFloorMaterial() == material, "platform sound material override lost");
+    }
+    platform.platformSound = nullptr;
+    std::puts("PASS platform footsteps: metal default and per-platform sound material overrides");
+}
+
+struct LensFlareRegressionTest {
+    class Buffer : public pddiPrimBuffer {
+        void SetVertexData(const void*, u32) override {}
+        void SetIndices(const u16*, u32) override {}
+        u32 GetIndexCount() const override { return 0; }
+        u32 GetVertexCount() const override { return 0; }
+        pddiPrimType GetPrimType() const override { return PDDI_PRIM_TRIANGLES; }
+    };
+
+    static void Run() {
+        LevelManager manager;
+        std::array<OriginalGeo*, 3> geometry{};
+        const s32 hashes[] = {362594, 43500977, 289117};
+        for (size_t i = 0; i < geometry.size(); ++i) {
+            geometry[i] = new OriginalGeo();
+            geometry[i]->nameCRC = hashes[i];
+            manager.AddOriginal(geometry[i], 0);
+            geometry[i]->meshBuffer = new Buffer();
+        }
+        auto& streak = *geometry[1];
+        for (u32 count : {0u, 1u, 4u, 5u, 6u}) {
+            delete[] streak.dynamicColorList;
+            streak.dynamicColorList = new u32[count ? count : 1]{};
+            streak.dynamicColorCount = count;
+            LensFlare flare;
+            Check(flare.InitLensFlare(0, nullptr) != 0, "synthetic flare geometry failed to load");
+            Check(flare.clampColourEntry == (count > 4 ? streak.dynamicColorList + 4 : nullptr),
+                "flare accepted a missing colour lane or rejected a valid lane");
+            flare.InitLensFlare(1, nullptr);
+            Check(!flare.clampColourEntry, "flare reinitialization retained an obsolete colour pointer");
+        }
+        std::puts("PASS lens flare: empty/short/valid colour tables and reinitialization");
+    }
+};
 
 static void WriteWave(const std::filesystem::path& path, s16 value, bool malformed = false) {
     std::filesystem::create_directories(path.parent_path());
@@ -212,6 +276,8 @@ int AutoTest_VerifyEngineIntegration(const char* outputDirectory) {
         TestEncounters();
         TestAnimation();
         TestBossAndSpatialAudio();
+        TestPlatformMaterials();
+        LensFlareRegressionTest::Run();
         TestSoundOverrides(output);
         HUD hud;
         Check(hud.dragonShowState == (CUSTOM_MENU ? 1 : 0), "HUD initial toggle state");

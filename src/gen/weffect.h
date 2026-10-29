@@ -59,7 +59,8 @@ public:
     OriginalGeo* SetUpFirstGeo();
 
     void Render(const Mat4& worldMatrix, u32 flags);
-    void Render(const LVector& pos, const LVector* scale, const LVector* rotation, u32 flags);
+    void Render(const LVector& pos, const LVector* scale, const LVector* rotation, u32 flags,
+                s32 colourLane = -1, u32 colourWord = 0);
     void InitFastRender(OriginalGeo* geo);
     void DoFastRender();
 
@@ -293,6 +294,9 @@ public:
 };
 
 class LensFlare : public FWEffect {
+#if defined(RECHAN_VISUAL_TESTS)
+    friend struct LensFlareRegressionTest;
+#endif
 public:
     LensFlare();
     ~LensFlare() override;

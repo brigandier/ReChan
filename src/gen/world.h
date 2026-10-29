@@ -69,12 +69,6 @@ public:
     void CheckThingSwitches(Thing* thing);
     WDBSwitch* FindPrimarySwitchByCRC(u32 crc);
     void ProcessPendingSwitchActions();
-    void RequestPlayerResetOnLoad() { pendingPlayerReset = true; }
-    bool ConsumePlayerResetOnLoad() {
-        const bool shouldReset = pendingPlayerReset;
-        pendingPlayerReset = false;
-        return shouldReset;
-    }
 
     u32 GetCurrentLevelIndex() const { return currentLevelIndex; }
     u32 GetTargetLevelIndex() const { return targetLevelIndex; }
@@ -207,7 +201,6 @@ private:
     u32 currentPetalIndex = 0;
     u32 targetPetalIndex = 0;
     u32 previousLevelIndex = 0xFFFFFFFF;
-    bool pendingPlayerReset = false;
     ccList switchLists[4];
 
     void LoadTPGTextures(const u8* lcfData, u32 lcfSize);

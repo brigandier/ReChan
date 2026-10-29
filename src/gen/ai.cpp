@@ -965,7 +965,7 @@ void AI::Populate() {
             Player* player = Player::s_player;
             if (player) {
                 World* world = g_game ? g_game->GetWorld() : nullptr;
-                if (world && world->ConsumePlayerResetOnLoad()) {
+                if (world) {
                     LOG_ALWAYS("[Load] resetting player before spawn checkpoint=%d", player->checkpoint.IsValid());
                     player->Reset();
                     LOG_ALWAYS("[Load] player reset completed hp=%d lives=%d", player->health, player->GetLivesLeft());

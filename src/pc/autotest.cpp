@@ -247,6 +247,9 @@ static bool s_deathCheckpoint = false, s_deathPending = false, s_deathDecisionSe
 static bool s_deathTransition = false, s_deathTransitionStarted = false;
 static bool s_deathProgress = false;
 static bool s_deathFullLevel = false;
+static bool s_regionResetPending = false, s_expectedCheckpoint = false;
+static s32 s_regionLives = 0, s_checkpointBlock = 0;
+static LVector s_checkpointPos = {};
 static int s_deathWaitFrames = 0, s_deathExpectedLives = 0;
 static std::string s_benchmarkFlow;
 static bool s_benchmarkTriggered = false;
@@ -510,10 +513,22 @@ bool AutoTest_Step(GameState state) {
         }
         if (state != GameState::Play || !Player::s_player) return true;
         auto* player = Player::s_player;
+        if (s_regionResetPending) {
+            if (player->health != 200 || player->GetLivesLeft() != s_regionLives) {
+                AutoTest_Fail(25, "region transition did not restore health while preserving lives"); return false;
+            }
+            LOG_ALWAYS("[DeathTest] region transition reset verified hp=%d lives=%d", player->health, player->GetLivesLeft());
+            s_regionResetPending = false;
+        }
         if (s_deathPending) {
             if (!s_deathDecisionSeen) return true;
-            if (player->GetLivesLeft() != s_deathExpectedLives || player->health <= 0) {
+            if (player->GetLivesLeft() != s_deathExpectedLives || player->health != 200) {
                 AutoTest_Fail(25, "real reload did not restore living player with expected lives"); return false;
+            }
+            if (s_expectedCheckpoint && (!player->checkpoint.IsValid()
+                || player->checkpoint.field0 != s_checkpointPos.x || player->checkpoint.field4 != s_checkpointPos.y
+                || player->checkpoint.field8 != s_checkpointPos.z || player->checkpoint.field24 != s_checkpointBlock)) {
+                AutoTest_Fail(25, "real reload changed checkpoint coordinates or block"); return false;
             }
             LOG_ALWAYS("[DeathTest] reload verified lives=%d hp=%d checkpoint=%d region=%u", player->GetLivesLeft(),
                 player->health, player->checkpoint.IsValid(), g_game->GetWorld()->GetCurrentPetalIndex());
@@ -541,12 +556,18 @@ bool AutoTest_Step(GameState state) {
                 AutoTest_Fail(25, "death-after-region requires another region"); return false;
             }
             world->SetTargetPetalIndex(world->GetCurrentPetalIndex() + 1);
+            s_regionLives = player->GetLivesLeft();
+            player->health = 37;
+            s_regionResetPending = true;
             g_game->SetState(GameState::QueuePetalLoad);
             s_deathTransitionStarted = true; s_deathWaitFrames = 0; return true;
         }
         if (s_deathsStarted == 0) player->SetLivesLeft(s_deathLives);
         if (s_deathCheckpoint) player->OnCheckpoint();
         else player->checkpoint.SetValidState(0);
+        s_expectedCheckpoint = player->checkpoint.IsValid();
+        s_checkpointPos = {player->checkpoint.field0, player->checkpoint.field4, player->checkpoint.field8};
+        s_checkpointBlock = player->checkpoint.field24;
         s_deathExpectedLives = player->GetLivesLeft() - 1;
         int activeEnemies = 0;
         if (g_ai) for (auto* node = g_ai->humanoidList.head; node; node = node->next)
