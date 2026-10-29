@@ -11,6 +11,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Localization hash tests failed.' }
     & $Python -m unittest discover -s tests -p test_session_summary.py
     if ($LASTEXITCODE -ne 0) { throw 'Session classification tests failed.' }
+    & $Python -m unittest discover -s tests -p test_upstream_check.py
+    if ($LASTEXITCODE -ne 0) { throw 'Upstream comparison tests failed.' }
     & build/tests/support-tests.exe
     if ($LASTEXITCODE -ne 0) { throw 'Subtitle/prompt tests failed. Generate with premake5 --tests vs2022 and build Release first.' }
     & build/tests/gamepad-tests.exe
