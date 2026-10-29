@@ -27,6 +27,9 @@ switch/**/build_log.txt
 switch/libp3d/lib/
 
 minidumps/
+logs/
+*-crash.txt
+*-crash.dmp
 scripts/autotest-baseline/
 scripts/build-local.bat
 scripts/build-local.ps1

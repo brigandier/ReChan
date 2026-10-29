@@ -48,6 +48,7 @@
 #include "radlib/rtask.h"
 #include "pc/textmgr.h"
 #include "pc/autotest.h"
+#include "pc/crashreporter.h"
 #include "extra/version.h"
 
 #include <thread>
@@ -269,6 +270,10 @@ void Game::InternalOpen() {
     }
 
     g_settings.Load(SETTINGS_PATH);
+    LOG_ALWAYS("[Startup] language=%s resolution=%dx%d screenMode=%d speaker=%d volume=%d", g_customText.GetLanguageCode(),
+        g_display->GetScreenWidth(), g_display->GetScreenHeight(), g_display->GetScreenMode(),
+        g_settings.controllerSpeakerEnabled, g_settings.controllerSpeakerVolume);
+    CrashReporter::SetOperation("game managers initialized and settings loaded");
 
     LOG("[Game] InternalOpen: managers created");
 }
@@ -734,6 +739,10 @@ void Game::SetState(GameState s) {
     s32 idx = static_cast<s32>(s);
     stateFunc = sStateTable[idx];
     state = s;
+    const World* diagnosticWorld = GetWorld();
+    CrashReporter::SetGameContext((int)s, diagnosticWorld ? diagnosticWorld->GetCurLevelID() : -1,
+        diagnosticWorld ? (int)diagnosticWorld->GetCurrentPetalIndex() : -1);
+    if (s == GameState::Play) CrashReporter::SetOperation("gameplay resumed");
 
 #if HIGH_FPS_PLAY_PRESENTATION
     auto usesFixedLogicStep = [](GameState s) {
@@ -1921,6 +1930,7 @@ bool Game::gsOpenLocationState(Game* game) {
 
 bool Game::gsQueueLevelLoad(Game* game) {
     MARKFUNCTION(0x80029574); // gsQueueLevelLoad
+    CrashReporter::SetOperation("queue full level load");
 
     // PSX: 520 bytes, 33 blocks.
 
@@ -1953,6 +1963,7 @@ bool Game::gsQueueLevelLoad(Game* game) {
     }
 
     // PSX: UnloadLevel(world), UnloadLevelPart2(world)
+    LOG_ALWAYS("[Load] level target=%u region=%u player=%p", world->GetTargetLevelIndex(), world->GetTargetPetalIndex(), Player::s_player);
     world->Unload();
     world->UnloadLevelPart2();
 
@@ -2026,6 +2037,7 @@ bool Game::gsQueueLevelLoad(Game* game) {
 
 bool Game::gsQueuePetalLoad(Game* game) {
     MARKFUNCTION(0x8002977C); // gsQueuePetalLoad
+    CrashReporter::SetOperation("queue region reload");
 
     // PSX: rsEvent(6,0,0,0) - stop music
     rsEvent(RS_STOP_MUSIC, 0, 0, 0);
@@ -2136,6 +2148,7 @@ bool Game::gsQueueLevelPetalLoad(Game* game) {
 
 bool Game::gsDetermineNextGameState(Game* game) {
     MARKFUNCTION(0x80029924); // gsDetermineNextGameState
+    CrashReporter::SetOperation("determine death reload or game over");
 
     // PSX: Shock(18) - controller vibration on death
     Shock(ShockEnum::SHOCK_CLEAR);
@@ -2144,6 +2157,8 @@ bool Game::gsDetermineNextGameState(Game* game) {
     if (Player::s_player) {
         s32 lives = Player::s_player->GetLivesLeft() - 1;
         Player::s_player->SetLivesLeft(lives);
+        LOG_ALWAYS("[Death] lives before=%d after=%d checkpoint=%d player=%p", lives + 1, lives,
+            Player::s_player->checkpoint.IsValid(), Player::s_player);
 
         if (lives <= 0) {
             Player::s_player->SetLivesLeft(Player::kMaxLives);
@@ -2165,6 +2180,7 @@ bool Game::gsDetermineNextGameState(Game* game) {
 
 bool Game::gsDetermineGameOverState(Game* game) {
     MARKFUNCTION(0x800299B0); // gsDetermineGameOverState
+    CrashReporter::SetOperation("death script requested game-over decision");
     // PSX: returns 0 (false) - stops the game loop
     return false;
 }

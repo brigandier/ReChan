@@ -10,6 +10,7 @@
 #include "p3d/skeleton.h"
 #include "pddi/pddi.h"
 #include "pddi/pddidev.h"
+#include "pddi/gamepadaudio.h"
 #include "pc/audio.h"
 #include "pc/crashreporter.h"
 #include "pc/debugui.h"
@@ -49,6 +50,8 @@
 #include <string>
 #include <system_error>
 #include <memory>
+#include <thread>
+#include <chrono>
 
 #if defined(RC_PLATFORM_SWITCH)
 #include <unistd.h>
@@ -187,7 +190,7 @@ int main(int argc, char** argv) {
             "ReChan",
             "The 'pc' data folder was not found.\n\n"
             "Keep the executable together with the files it shipped with and start it from that folder.");
-        Log::Get().Shutdown();
+        Log::Get().Shutdown("handled-error", 1);
         return 1;
     }
 #endif
@@ -221,6 +224,19 @@ int main(int argc, char** argv) {
     if (argc >= 2 && std::strcmp(argv[1], "--test-crash-reporter") == 0) {
         CrashReporter::TriggerTestCrash();
     }
+#if defined(RECHAN_VISUAL_TESTS)
+    if (argc >= 2 && std::strcmp(argv[1], "--test-session-logging") == 0) {
+        CrashReporter::SetGameContext(21, 3, 1);
+        CrashReporter::SetOperation("diagnostic session fixture");
+        LOG_ALWAYS("[DiagnosticTest] marker persisted");
+        Log::Get().Shutdown("normal", 0);
+        return 0;
+    }
+    if (argc >= 2 && std::strcmp(argv[1], "--test-session-hold") == 0) {
+        LOG_ALWAYS("[DiagnosticTest] waiting for external termination");
+        for (;;) std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+#endif
 
     if (argc >= 3 && std::strcmp(argv[1], "--test-localization") == 0) {
         return AutoTest_VerifyLocalization(argv[2]);
@@ -301,6 +317,7 @@ int main(int argc, char** argv) {
     }
 
     TrySetPlatformWindowIcon();
+    CrashReporter::SetOperation("graphics context initialized");
 
 #ifdef MOD_LOADER
     if (argc >= 3 && std::strcmp(argv[1], "--verify-glb") == 0) {
@@ -437,6 +454,16 @@ int main(int argc, char** argv) {
 
         if (p3d::input) {
             p3d::input->ServiceInput();
+            GamepadAudioDevice diagnosticDevice;
+            p3d::input->GetGamepadAudioDevice(diagnosticDevice);
+            static unsigned int lastInstance = ~0u;
+            static int lastFamily = -1;
+            const int family = (int)p3d::input->GetGamepadFamily();
+            if (diagnosticDevice.instance != lastInstance || family != lastFamily) {
+                LOG_ALWAYS("[Input] active family=%d instance=%u vendor=%04X product=%04X", family,
+                    diagnosticDevice.instance, diagnosticDevice.vendor, diagnosticDevice.product);
+                lastInstance = diagnosticDevice.instance; lastFamily = family;
+            }
         }
         ControllerSpeaker::Update();
         if (g_actionInput) {
@@ -553,7 +580,7 @@ int main(int argc, char** argv) {
 #endif
     LOG_ALWAYS("[main] Platform resources released");
     LOG_ALWAYS("Clean shutdown");
-    Log::Get().Shutdown();
+    Log::Get().Shutdown(AutoTest_GetExitCode() ? "handled-error" : "normal", AutoTest_GetExitCode());
 
     return AutoTest_GetExitCode();
 }

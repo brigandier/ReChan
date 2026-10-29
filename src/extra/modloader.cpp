@@ -321,7 +321,7 @@ void ModLoader::Init() {
         ScanModFolder(std::string(kModsDir) + "/" + modName, modName, priority++);
     }
 
-    LOG("[ModLoader] Initialized: %zu mod(s), %zu texture(s), %zu model(s), %zu sound(s), %zu data file(s)",
+    LOG_ALWAYS("[ModLoader] Initialized: %zu mod(s), %zu texture(s), %zu model(s), %zu sound(s), %zu data file(s)",
         m_mods.size(),
         m_textureIndex.size(),
         m_modelIndex.size(),
@@ -370,6 +370,7 @@ void ModLoader::ScanModFolder(const std::string& folderPath, const std::string& 
     info.dataCount = ScanCategory(folderPath, modName, ".json", m_dataIndex);
 
     m_mods.push_back(std::move(info));
+    LOG_ALWAYS("[ModLoader] active=%s priority=%d", modName.c_str(), priority);
 }
 
 int ModLoader::ScanCategory(

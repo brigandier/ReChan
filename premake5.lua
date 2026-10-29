@@ -55,6 +55,8 @@ include "vendor/libp3d"
 project "rechan"
     kind "ConsoleApp"
     language "C++"
+    local buildCommit = os.outputof("git rev-parse --short=12 HEAD"):gsub("%s+", "")
+    if buildCommit:match("^[0-9a-f]+$") then defines { 'RECHAN_BUILD_COMMIT="' .. buildCommit .. '"' } end
     cppdialect "C++20"
     staticruntime "on"
     targetdir "bin"

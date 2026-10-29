@@ -1,4 +1,5 @@
 #include "common.h"
+#include "pc/crashreporter.h"
 #include "ai/activezn.h"
 #include "ai/generator.h"
 #include "ai/obstacle.h"
@@ -4592,6 +4593,7 @@ void World::OffsetToPreventSeams(LVector& pos, const LVector& playerPos) {
 }
 
 void World::Unload() {
+    CrashReporter::SetOperation("unload level resources");
     if (g_hud) {
         g_hud->OnUnloadLevel();
     }
@@ -4673,6 +4675,7 @@ void World::UnloadPermanent() {
 
 // PSX: UnloadPetal__5World (WORLD.CPP:1176, 0x80045F34)
 void World::UnloadPetal() {
+    CrashReporter::SetOperation("unload region entities and resources");
     MARKFUNCTION(0x80045F34);
     WEffect_UnPopulateWEffects(-1);
     WEffect_Unload();
@@ -4708,6 +4711,8 @@ void World::UnloadPetal() {
 // PSX: LoadPetal__5WorldUl (WORLD.CPP:1222, 0x8004604C)
 void World::LoadPetal(u32 petalIndex) {
     MARKFUNCTION(0x8004604C);
+    CrashReporter::SetOperation("load region stream and database");
+    LOG_ALWAYS("[Load] region begin level=%d current=%u target=%u bytes=%zu", GetCurLevelID(), currentPetalIndex, petalIndex, streamData.size());
 
     // PSX: if current level is DestSelect (lev07), save as previous
     if (levelList && currentLevelIndex < (u32)levelCount) {
@@ -4825,6 +4830,7 @@ void World::LoadPetal(u32 petalIndex) {
     }
     FillMeter(40);
 
+    CrashReporter::SetOperation("recreate region entities");
     // PSX: AI::Populate for new petal entities
     if (g_ai) {
         g_ai->Populate();
@@ -4854,6 +4860,7 @@ void World::LoadPetal(u32 petalIndex) {
 
     ProcessSwitches();
 
+    CrashReporter::SetOperation("initialize region camera and switches");
     // PSX: ExecuteLoadCallbacks -> cameraLoadFunc -> SetupPaths after petal load.
     if (g_cameraManager) {
         g_cameraManager->SetupPaths();

@@ -1,6 +1,8 @@
 #include "pc/crashreporter.h"
 
 #include "extra/version.h"
+#include "pc/log.h"
+#include <atomic>
 
 #include <csignal>
 #include <cstdio>
@@ -11,15 +13,27 @@
 static constexpr const char* kIssueUrl =
 "https://github.com/SilverwireGames/ReChan/issues/new";
 
+static std::atomic<int> s_gameState{-1}, s_level{-1}, s_region{-1};
+static std::atomic<const char*> s_operation{"startup"};
+void CrashReporter::SetGameContext(int state, int level, int region) {
+    s_gameState.store(state); s_level.store(level); s_region.store(region);
+}
+void CrashReporter::SetOperation(const char* operation) {
+    s_operation.store(operation ? operation : "unknown");
+    LOG_ALWAYS("[Operation] %s", operation ? operation : "unknown");
+}
+
 #if defined(RC_PLATFORM_WINDOWS)
 
 #define NOMINMAX
 #include <windows.h>
 #include <dbghelp.h>
 
+
 static volatile LONG s_handlingCrash = 0;
-static char s_reportPath[MAX_PATH] = "rechan-crash.txt";
-static char s_dumpPath[MAX_PATH] = "rechan-crash.dmp";
+static wchar_t s_reportPath[32768]{}, s_dumpPath[32768]{}, s_logPath[32768]{};
+static char s_logUtf8[32768]{};
+static bool s_suppressDialog = false;
 
 static void WriteHandle(HANDLE file, const char* text) {
     if (file == INVALID_HANDLE_VALUE || !text) return;
@@ -27,191 +41,100 @@ static void WriteHandle(HANDLE file, const char* text) {
     WriteFile(file, text, static_cast<DWORD>(std::strlen(text)), &written, nullptr);
 }
 
-static void AppendFileToHandle(HANDLE output, const char* path) {
-    HANDLE input = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
-                               nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+static void AppendLogTail(HANDLE output) {
+    HANDLE input = CreateFileW(s_logPath, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+        nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (input == INVALID_HANDLE_VALUE) return;
-
+    LARGE_INTEGER size{}, offset{};
+    if (GetFileSizeEx(input, &size) && size.QuadPart > 65536) {
+        offset.QuadPart = size.QuadPart - 65536;
+        SetFilePointerEx(input, offset, nullptr, FILE_BEGIN);
+    }
     char buffer[4096];
     DWORD read = 0;
-    while (ReadFile(input, buffer, sizeof(buffer), &read, nullptr) && read > 0) {
+    for (int blocks = 0; blocks < 16 && ReadFile(input, buffer, sizeof(buffer), &read, nullptr) && read; ++blocks) {
         DWORD written = 0;
         WriteFile(output, buffer, read, &written, nullptr);
     }
     CloseHandle(input);
 }
 
-static bool EnsureMinidumpDirectory() {
-    if (CreateDirectoryA("minidumps", nullptr)) return true;
-    if (GetLastError() != ERROR_ALREADY_EXISTS) return false;
-    const DWORD attributes = GetFileAttributesA("minidumps");
-    return attributes != INVALID_FILE_ATTRIBUTES &&
-        (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
-}
-
-static void BuildCrashPaths() {
-    const unsigned long pid = static_cast<unsigned long>(GetCurrentProcessId());
-    const bool hasDirectory = EnsureMinidumpDirectory();
-    std::snprintf(s_reportPath, sizeof(s_reportPath),
-                  hasDirectory ? "minidumps\\rechan-crash-%lu.txt" : "rechan-crash-%lu.txt",
-                  pid);
-    std::snprintf(s_dumpPath, sizeof(s_dumpPath),
-                  hasDirectory ? "minidumps\\rechan-crash-%lu.dmp" : "rechan-crash-%lu.dmp",
-                  pid);
-}
-
-static void WriteMiniDump(EXCEPTION_POINTERS* exceptionInfo) {
-    HANDLE dump = CreateFileA(s_dumpPath, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
-                              FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (dump == INVALID_HANDLE_VALUE) return;
-
-    MINIDUMP_EXCEPTION_INFORMATION info = {};
-    MINIDUMP_EXCEPTION_INFORMATION* infoPtr = nullptr;
-    if (exceptionInfo) {
-        info.ThreadId = GetCurrentThreadId();
-        info.ExceptionPointers = exceptionInfo;
-        info.ClientPointers = FALSE;
-        infoPtr = &info;
+static void WriteCrashReport(EXCEPTION_POINTERS* exceptionInfo, const char* reason) {
+    // Paths and diagnostic context are prepared before faults. No logger mutex,
+    // symbol loading, directory traversal or game-object access is allowed here.
+    HANDLE report = CreateFileW(s_reportPath, GENERIC_WRITE, FILE_SHARE_READ, nullptr,
+        CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (report != INVALID_HANDLE_VALUE) {
+        char buffer[2048];
+        std::snprintf(buffer, sizeof(buffer),
+            "ReChan fatal report\r\nVersion: %s\r\nPID: %lu\r\nThread: %lu\r\nReason: %s\r\n"
+            "Game state: %d\r\nLevel: %d\r\nRegion: %d\r\nLast operation: %s\r\n",
+            GAME_VERSION, GetCurrentProcessId(), GetCurrentThreadId(), reason,
+            s_gameState.load(), s_level.load(), s_region.load(), s_operation.load());
+        WriteHandle(report, buffer);
+        WriteHandle(report, "Session log: "); WriteHandle(report, s_logUtf8); WriteHandle(report, "\r\n");
+        if (exceptionInfo && exceptionInfo->ExceptionRecord) {
+            const auto* record = exceptionInfo->ExceptionRecord;
+            std::snprintf(buffer, sizeof(buffer), "Exception code: 0x%08lX\r\nFault address: %p\r\n",
+                record->ExceptionCode, record->ExceptionAddress);
+            WriteHandle(report, buffer);
+            if (record->ExceptionCode == EXCEPTION_ACCESS_VIOLATION && record->NumberParameters >= 2) {
+                std::snprintf(buffer, sizeof(buffer), "Access type: %llu\r\nReferenced address: %p\r\n",
+                    (unsigned long long)record->ExceptionInformation[0], (void*)record->ExceptionInformation[1]);
+                WriteHandle(report, buffer);
+            }
+        }
+#if defined(_M_X64) || defined(__x86_64__)
+        if (exceptionInfo && exceptionInfo->ContextRecord) {
+            std::snprintf(buffer, sizeof(buffer), "Fault context RIP: 0x%llX RSP: 0x%llX\r\n",
+                (unsigned long long)exceptionInfo->ContextRecord->Rip, (unsigned long long)exceptionInfo->ContextRecord->Rsp);
+            WriteHandle(report, buffer);
+        }
+#endif
+        WriteHandle(report, "Handler stack addresses (resolve the fault stack offline from the dump):\r\n");
+        void* frames[32]{};
+        const USHORT count = CaptureStackBackTrace(0, 32, frames, nullptr);
+        for (USHORT i = 0; i < count; ++i) {
+            std::snprintf(buffer, sizeof(buffer), "  #%u %p\r\n", i, frames[i]);
+            WriteHandle(report, buffer);
+        }
+        WriteHandle(report, "\r\nSession log tail (up to 64 KiB):\r\n");
+        AppendLogTail(report);
+        FlushFileBuffers(report);
+        CloseHandle(report);
     }
-
+    HANDLE dump = CreateFileW(s_dumpPath, GENERIC_WRITE, 0, nullptr, CREATE_NEW,
+        FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (dump == INVALID_HANDLE_VALUE) return;
+    MINIDUMP_EXCEPTION_INFORMATION info{};
+    info.ThreadId = GetCurrentThreadId(); info.ExceptionPointers = exceptionInfo; info.ClientPointers = FALSE;
     MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), dump,
-                      static_cast<MINIDUMP_TYPE>(MiniDumpWithIndirectlyReferencedMemory |
-                      MiniDumpScanMemory |
-                      MiniDumpWithThreadInfo),
-                      infoPtr, nullptr, nullptr);
+        (MINIDUMP_TYPE)(MiniDumpWithIndirectlyReferencedMemory | MiniDumpWithThreadInfo),
+        exceptionInfo ? &info : nullptr, nullptr, nullptr);
+    FlushFileBuffers(dump);
     CloseHandle(dump);
 }
 
-static void WriteCrashReport(EXCEPTION_POINTERS* exceptionInfo, const char* reason) {
-    BuildCrashPaths();
-    WriteMiniDump(exceptionInfo);
-
-    HANDLE report = CreateFileA(s_reportPath, GENERIC_WRITE, FILE_SHARE_READ, nullptr,
-                                CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (report == INVALID_HANDLE_VALUE) return;
-
-    SYSTEMTIME now = {};
-    GetLocalTime(&now);
-    char buffer[2048];
-    std::snprintf(buffer, sizeof(buffer),
-                  "ReChan crash report\r\n"
-                  "===================\r\n"
-                  "Version: %s\r\n"
-                  "Platform: Windows x86_64\r\n"
-                  "Time: %04u-%02u-%02u %02u:%02u:%02u\r\n"
-                  "Process ID: %lu\r\n"
-                  "Thread ID: %lu\r\n"
-                  "Reason: %s\r\n",
-                  GAME_VERSION,
-                  now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond,
-                  static_cast<unsigned long>(GetCurrentProcessId()),
-                  static_cast<unsigned long>(GetCurrentThreadId()),
-                  reason ? reason : "Unhandled exception");
-    WriteHandle(report, buffer);
-
-    if (exceptionInfo && exceptionInfo->ExceptionRecord) {
-        std::snprintf(buffer, sizeof(buffer),
-                      "Exception code: 0x%08lX\r\nFault address: %p\r\n",
-                      static_cast<unsigned long>(exceptionInfo->ExceptionRecord->ExceptionCode),
-                      exceptionInfo->ExceptionRecord->ExceptionAddress);
-        WriteHandle(report, buffer);
-
-        const EXCEPTION_RECORD* record = exceptionInfo->ExceptionRecord;
-        if (record->ExceptionCode == EXCEPTION_ACCESS_VIOLATION &&
-            record->NumberParameters >= 2) {
-            const char* operation = record->ExceptionInformation[0] == 1 ? "write"
-                : record->ExceptionInformation[0] == 8 ? "execute" : "read";
-            std::snprintf(buffer, sizeof(buffer),
-                          "Access violation operation: %s\r\nReferenced address: %p\r\n",
-                          operation, reinterpret_cast<void*>(record->ExceptionInformation[1]));
-            WriteHandle(report, buffer);
-        }
-    }
-
-    WriteHandle(report, "\r\nStack addresses:\r\n");
-    void* frames[64] = {};
-    const USHORT frameCount = CaptureStackBackTrace(0, 64, frames, nullptr);
-
-    const BOOL symInitialized = SymInitialize(GetCurrentProcess(), nullptr, TRUE);
-    if (symInitialized) {
-        SymSetOptions(SymGetOptions() | SYMOPT_LOAD_LINES | SYMOPT_UNDNAME);
-    }
-
-    for (USHORT i = 0; i < frameCount; ++i) {
-        bool resolved = false;
-        if (symInitialized) {
-            alignas(SYMBOL_INFO) char symBuffer[sizeof(SYMBOL_INFO) + MAX_SYM_NAME];
-            SYMBOL_INFO* symbol = reinterpret_cast<SYMBOL_INFO*>(symBuffer);
-            symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
-            symbol->MaxNameLen = MAX_SYM_NAME;
-            DWORD64 displacement = 0;
-            const DWORD64 address = reinterpret_cast<DWORD64>(frames[i]);
-            if (SymFromAddr(GetCurrentProcess(), address, &displacement, symbol)) {
-                IMAGEHLP_LINE64 line = {};
-                line.SizeOfStruct = sizeof(IMAGEHLP_LINE64);
-                DWORD lineDisplacement = 0;
-                if (SymGetLineFromAddr64(GetCurrentProcess(), address, &lineDisplacement, &line)) {
-                    std::snprintf(buffer, sizeof(buffer), "  #%02u %p %s+0x%llx (%s:%lu)\r\n", i,
-                                  frames[i], symbol->Name, static_cast<unsigned long long>(displacement),
-                                  line.FileName, line.LineNumber);
-                }
-                else {
-                    std::snprintf(buffer, sizeof(buffer), "  #%02u %p %s+0x%llx\r\n", i, frames[i],
-                                  symbol->Name, static_cast<unsigned long long>(displacement));
-                }
-                WriteHandle(report, buffer);
-                resolved = true;
-            }
-        }
-        if (!resolved) {
-            std::snprintf(buffer, sizeof(buffer), "  #%02u %p\r\n", i, frames[i]);
-            WriteHandle(report, buffer);
-        }
-    }
-
-    if (symInitialized) {
-        SymCleanup(GetCurrentProcess());
-    }
-
-    WriteHandle(report,
-                "\r\nPlease open an issue at:\r\n"
-                "https://github.com/SilverwireGames/ReChan/issues/new\r\n"
-                "Attach this report and its matching .dmp file.\r\n");
-    WriteHandle(report,
-                "\r\nrechan.log\r\n"
-                "==========\r\n");
-    AppendFileToHandle(report, "rechan.log");
-    CloseHandle(report);
-}
-
 static void NotifyUser() {
-#if defined(RC_PLATFORM_NULL)
-    // Headless/null-hardware build: no display to show a dialog on.
-    return;
+#if !defined(RC_PLATFORM_NULL)
+    if (!s_suppressDialog) MessageBoxW(nullptr,
+        L"ReChan stopped unexpectedly. Session log and crash files are in the logs folder.\n"
+        L"Keep the matching log, crash report and dump for diagnosis. Nothing is uploaded automatically.",
+        L"ReChan", MB_OK | MB_ICONERROR | MB_TASKMODAL);
 #endif
-    if (std::getenv("RECHAN_CRASH_REPORTER_NO_DIALOG")) return;
-
-    char message[1024];
-    std::snprintf(message, sizeof(message),
-                  "ReChan crashed and created:\n%s\n%s\n\n"
-                  "Please open an issue and attach both files:\n%s",
-                  s_reportPath, s_dumpPath, kIssueUrl);
-    MessageBoxA(nullptr, message, "ReChan crashed", MB_OK | MB_ICONERROR | MB_TASKMODAL);
 }
 
 static LONG WINAPI UnhandledExceptionHandler(EXCEPTION_POINTERS* exceptionInfo) {
-    if (InterlockedCompareExchange(&s_handlingCrash, 1, 0) != 0) {
-        return EXCEPTION_EXECUTE_HANDLER;
+    if (InterlockedCompareExchange(&s_handlingCrash, 1, 0) == 0) {
+        WriteCrashReport(exceptionInfo, "Unhandled structured exception");
+        NotifyUser();
     }
-    WriteCrashReport(exceptionInfo, "Unhandled structured exception");
-    NotifyUser();
     return EXCEPTION_EXECUTE_HANDLER;
 }
 
 [[noreturn]] static void TerminateHandler() {
     if (InterlockedCompareExchange(&s_handlingCrash, 1, 0) == 0) {
-        WriteCrashReport(nullptr, "std::terminate (uncaught C++ exception or fatal runtime error)");
-        NotifyUser();
+        WriteCrashReport(nullptr, "std::terminate"); NotifyUser();
     }
     TerminateProcess(GetCurrentProcess(), 3);
     std::abort();
@@ -219,26 +142,38 @@ static LONG WINAPI UnhandledExceptionHandler(EXCEPTION_POINTERS* exceptionInfo) 
 
 static void CrtSignalHandler(int signalNumber) {
     if (InterlockedCompareExchange(&s_handlingCrash, 1, 0) == 0) {
-        char reason[128];
+        char reason[80];
         std::snprintf(reason, sizeof(reason), "C runtime fatal signal %d", signalNumber);
-        WriteCrashReport(nullptr, reason);
-        NotifyUser();
+        WriteCrashReport(nullptr, reason); NotifyUser();
     }
-    TerminateProcess(GetCurrentProcess(), static_cast<UINT>(128 + signalNumber));
+    TerminateProcess(GetCurrentProcess(), (UINT)(128 + signalNumber));
 }
 
 void CrashReporter::Install() {
+    const auto& stem = Log::Get().GetSessionStem();
+    const auto& log = Log::Get().GetSessionPath();
+    const auto cache = [](const std::string& path, wchar_t* target, int capacity) {
+        return MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path.c_str(), -1, target, capacity) > 0;
+    };
+    cache(stem + "-crash.txt", s_reportPath, (int)std::size(s_reportPath));
+    cache(stem + "-crash.dmp", s_dumpPath, (int)std::size(s_dumpPath));
+    cache(log, s_logPath, (int)std::size(s_logPath));
+    std::snprintf(s_logUtf8, sizeof(s_logUtf8), "%s", log.c_str());
+    s_suppressDialog = std::getenv("RECHAN_CRASH_REPORTER_NO_DIALOG") != nullptr;
+    ULONG guarantee = 64 * 1024;
+    SetThreadStackGuarantee(&guarantee);
     SetErrorMode(GetErrorMode() | SEM_NOGPFAULTERRORBOX);
     SetUnhandledExceptionFilter(UnhandledExceptionHandler);
     std::set_terminate(TerminateHandler);
     std::signal(SIGABRT, CrtSignalHandler);
+    LOG_ALWAYS("[CrashReporter] Session paths prepared; native dump enabled");
 }
 
 void CrashReporter::ShowFatalMessage(const char* title, const char* message) {
+    LOG_ALWAYS("[Session] handled-error: %s", message ? message : "unknown");
     std::fprintf(stderr, "%s: %s\n", title, message);
 #if !defined(RC_PLATFORM_NULL)
-    if (std::getenv("RECHAN_CRASH_REPORTER_NO_DIALOG")) return;
-    MessageBoxA(nullptr, message, title, MB_OK | MB_ICONERROR | MB_TASKMODAL);
+    if (!s_suppressDialog) MessageBoxA(nullptr, message, title, MB_OK | MB_ICONERROR | MB_TASKMODAL);
 #endif
 }
 

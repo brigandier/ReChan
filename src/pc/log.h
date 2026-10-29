@@ -9,13 +9,16 @@ class Log {
 public:
     static Log& Get();
 
-    void Init(const char* filename = "rechan.log");
-    void Shutdown();
+    void Init(const char* directory = nullptr);
+    void Shutdown(const char* outcome = "unspecified", int exitCode = 0);
+    const std::string& GetSessionPath() const { return m_SessionPath; }
+    const std::string& GetSessionStem() const { return m_SessionStem; }
 
     void LogMessage(const char* fmt, ...);
     void LogMessageV(const char* fmt, va_list args);
 
     std::vector<std::string> GetMessageStack() const {
+        std::lock_guard<std::mutex> lock(m_Mutex);
         return m_MessageStack;
     }
 
@@ -30,7 +33,9 @@ private:
 
 private:
     std::ofstream m_File;
-    std::mutex m_Mutex;
+    mutable std::mutex m_Mutex;
+    std::string m_SessionPath;
+    std::string m_SessionStem;
     std::vector<std::string> m_MessageStack;
 };
 

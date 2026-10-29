@@ -889,7 +889,7 @@ bool AudioEngine::Init() {
 
     g_initialized = true;
 
-    LOG("AudioEngine: initialized (device %u Hz, %u ch, period %u frames)",
+    LOG_ALWAYS("[Audio] initialized device=%s rate=%u channels=%u period=%u", g_device.playback.name,
         g_deviceSampleRate, g_outputChannels, config.periodSizeInFrames);
     return true;
 #endif
@@ -898,6 +898,7 @@ bool AudioEngine::Init() {
 void AudioEngine::Shutdown() {
     ControllerSpeaker::Shutdown();
     if (!g_initialized) return;
+    LOG_ALWAYS("[Audio] shutdown begin");
 
 #if defined(RC_PLATFORM_SWITCH)
     // Stop the audio thread first (so it stops touching voices/samples), then

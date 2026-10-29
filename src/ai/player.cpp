@@ -1,4 +1,5 @@
 #include "ai/player.h"
+#include "pc/crashreporter.h"
 #include "ai/colfight.h"
 #include "ai/obstacle.h"
 #include "ai/pickup.h"
@@ -2843,6 +2844,8 @@ void Player::_Dead() {
 
     if (!field620) {
         field620 = 1;
+        LOG_ALWAYS("[Death] begin lives=%d hp=%d checkpoint=%d block=%u", GetLivesLeft(), health, checkpoint.IsValid(), blockNum);
+        CrashReporter::SetOperation("player death script started");
         if (g_director) {
             g_director->SetCodeSnip(Director::GetDeathScript(), nullptr);
         }
