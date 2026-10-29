@@ -225,6 +225,11 @@ int main(int argc, char** argv) {
         CrashReporter::TriggerTestCrash();
     }
 #if defined(RECHAN_VISUAL_TESTS)
+    if (argc >= 2 && std::strcmp(argv[1], "--test-crash-exception") == 0) {
+        CrashReporter::SetGameContext(21, 4, 0);
+        CrashReporter::SetOperation("diagnostic exception during region reload");
+        CrashReporter::TriggerTestException();
+    }
     if (argc >= 2 && std::strcmp(argv[1], "--test-session-logging") == 0) {
         CrashReporter::SetGameContext(21, 3, 1);
         CrashReporter::SetOperation("diagnostic session fixture");
@@ -312,7 +317,7 @@ int main(int argc, char** argv) {
 #endif
         tPlatform::Destroy();
         LOG_ALWAYS("[main] Context initialization failed; platform released");
-        Log::Get().Shutdown();
+        Log::Get().Shutdown("handled-error", 1);
         return 1;
     }
 
@@ -496,19 +501,7 @@ int main(int argc, char** argv) {
         bool running = game.Step();
         g_frameProfile.logicMs = (f32)((Time::GetTimeInSeconds() - stepT0) * 1000.0) - g_frameProfile.drawSubmitMs;
         if (!running) {
-            // PC: If the game loop signals to stop, break out of the loop to shut down.
-            if (game.GetState() == GameState::End) {
-                break;
-            }
-
-            if (stateBeforeStep == GameState::DetermineGameOverState) {
-                game.SetState(GameState::DetermineNextGameState);
-            }
-            else {
-                // PSX: SetLivesLeft(g_player, savedLives)
-                Player::s_player->SetLivesLeft(4);
-                game.SetState(GameState::QueueLevelLoad);
-            }
+            if (!game.HandleStoppedStep(stateBeforeStep)) break;
         }
         else {
             rDoTaskList(&rMainTaskList, static_cast<u32>(rFrameCount60));

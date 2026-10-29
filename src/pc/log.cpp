@@ -4,6 +4,9 @@
 #include <chrono>
 #include <ctime>
 #include <cstdlib>
+#include <algorithm>
+#include <csignal>
+#include <cerrno>
 #if defined(_WIN32)
 #define NOMINMAX
 #include <windows.h>
@@ -11,6 +14,44 @@
 #include <unistd.h>
 #include <fcntl.h>
 #endif
+
+static void PruneSessions(const std::filesystem::path& directory) {
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    std::vector<fs::path> sessions;
+    for (fs::directory_iterator it(directory, ec), end; !ec && it != end; it.increment(ec)) {
+        if (!it->is_regular_file(ec) || it->path().extension() != ".log") continue;
+        const auto name = it->path().stem().string();
+        unsigned int year, month, day, hour, minute, second, milliseconds, attempt;
+        unsigned long pid;
+        int consumed = 0;
+        if (std::sscanf(name.c_str(), "%u-%u-%u_%u-%u-%u_%u_%lu_%u%n", &year, &month, &day,
+            &hour, &minute, &second, &milliseconds, &pid, &attempt, &consumed) == 9
+            && consumed == (int)name.size()) sessions.push_back(it->path());
+    }
+    std::sort(sessions.begin(), sessions.end(), std::greater<fs::path>());
+    for (size_t i = 20; i < sessions.size(); ++i) {
+        // Open sessions are protected by the native file-sharing contract on Windows.
+#if defined(_WIN32)
+        HANDLE probe = CreateFileW(sessions[i].c_str(), GENERIC_READ | DELETE, 0, nullptr,
+            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (probe == INVALID_HANDLE_VALUE) continue;
+        CloseHandle(probe);
+#else
+        // A running process may still own an older session on platforms without sharing locks.
+        const auto name = sessions[i].stem().string();
+        const auto last = name.find_last_of('_');
+        const auto previous = name.find_last_of('_', last - 1);
+        const auto pid = std::strtol(name.c_str() + previous + 1, nullptr, 10);
+        if (pid > 0 && (kill((pid_t)pid, 0) == 0 || errno == EPERM)) continue;
+#endif
+        auto stem = sessions[i]; stem.replace_extension();
+        fs::remove(sessions[i], ec);
+        if (ec) continue;
+        fs::remove(fs::path(stem.native() + fs::path("-crash.txt").native()), ec);
+        fs::remove(fs::path(stem.native() + fs::path("-crash.dmp").native()), ec);
+    }
+}
 
 #ifndef RECHAN_BUILD_COMMIT
 #define RECHAN_BUILD_COMMIT "unavailable"
@@ -83,6 +124,7 @@ void Log::Init(const char* directory) {
             const auto utf8Path = path.u8string(), utf8Stem = stem.u8string();
             m_SessionPath.assign((const char*)utf8Path.data(), utf8Path.size());
             m_SessionStem.assign((const char*)utf8Stem.data(), utf8Stem.size());
+            PruneSessions(folder);
             return true;
         }
         return false;
@@ -104,7 +146,7 @@ void Log::Init(const char* directory) {
     std::snprintf(header, sizeof(header), "[Session] started=%s local pid=%lu version=%s commit=%s\n",
         date, pid, GAME_VERSION, RECHAN_BUILD_COMMIT);
     if (opened) {
-        m_File << header << "[Session] log=" << m_SessionPath << '\n';
+        m_File << header << "[Session] log=" << m_SessionPath << "\n[Session] retention=20 sessions; active logs are retained\n";
         m_File.flush();
     }
     std::fprintf(stderr, "%s[Session] log=%s\n", header, opened ? m_SessionPath.c_str() : "unavailable (no writable diagnostic directory)");

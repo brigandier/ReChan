@@ -4709,10 +4709,23 @@ void World::UnloadPetal() {
 }
 
 // PSX: LoadPetal__5WorldUl (WORLD.CPP:1222, 0x8004604C)
-void World::LoadPetal(u32 petalIndex) {
+bool World::LoadPetal(u32 petalIndex) {
     MARKFUNCTION(0x8004604C);
     CrashReporter::SetOperation("load region stream and database");
     LOG_ALWAYS("[Load] region begin level=%d current=%u target=%u bytes=%zu", GetCurLevelID(), currentPetalIndex, petalIndex, streamData.size());
+    if (!levelList || currentLevelIndex >= (u32)levelCount || streamData.empty() || !g_blockManager || !g_database || !g_ai) {
+        LOG_ALWAYS("[Load] region failed: missing loaded level stream or managers");
+        return false;
+    }
+    // Validate the region boundary before committing indices or indexing its database.
+    const auto validatedEntries = ParseStreamHeader(streamData.data(), (u32)streamData.size());
+    std::vector<u32> validatedDatabases;
+    for (u32 i = 0; i < validatedEntries.size(); ++i)
+        if (std::strncmp(validatedEntries[i].magic, ".WDB", 4) == 0) validatedDatabases.push_back(i);
+    if (validatedDatabases.empty()) {
+        LOG_ALWAYS("[Load] region failed: no database boundary in loaded stream");
+        return false;
+    }
 
     // PSX: if current level is DestSelect (lev07), save as previous
     if (levelList && currentLevelIndex < (u32)levelCount) {
@@ -4741,7 +4754,7 @@ void World::LoadPetal(u32 petalIndex) {
     if (!g_blockManager) {
         ASSERT(false);
         StopLogo();
-        return;
+        return false;
     }
     BlockManager& blockMgr = *g_blockManager;
 
@@ -4768,15 +4781,10 @@ void World::LoadPetal(u32 petalIndex) {
         u32 dataSize = static_cast<u32>(streamData.size());
         const u8* data = streamData.data();
 
-        auto entries = ParseStreamHeader(data, dataSize);
+        const auto& entries = validatedEntries;
 
         // Find WDB entry indices (petal boundaries)
-        std::vector<u32> wdbIndices;
-        for (u32 i = 0; i < (u32)entries.size(); i++) {
-            if (strncmp(entries[i].magic, ".WDB", 4) == 0) {
-                wdbIndices.push_back(i);
-            }
-        }
+        const auto& wdbIndices = validatedDatabases;
 
         u32 pi = petalIndex;
         if (pi >= (u32)wdbIndices.size()) pi = 0;
@@ -4877,6 +4885,8 @@ void World::LoadPetal(u32 petalIndex) {
     if (g_director) {
         g_director->SkipNextWideScreenEnterAnim();
     }
+    LOG_ALWAYS("[Load] region completed level=%d region=%u player=%p", GetCurLevelID(), currentPetalIndex, Player::s_player);
+    return true;
 }
 
 // PSX: DeletePlayerBlendAndAnimData__Fv (WORLD.CPP:2059, 0x80047014)

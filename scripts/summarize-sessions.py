@@ -15,7 +15,8 @@ def summarize(path):
         outcome = 'handled-error'
     else:
         outcome = 'incomplete-or-unspecified; cause unknown'
-    return {'log': str(path), 'outcome': outcome, 'report': str(report) if report.exists() else None,
+    return {'log': str(path), 'outcome': outcome, 'handled_errors_recorded': '[Session] handled-error:' in contents,
+            'report': str(report) if report.exists() else None,
             'dump': str(dump) if dump.exists() else None}
 
 if __name__ == '__main__':

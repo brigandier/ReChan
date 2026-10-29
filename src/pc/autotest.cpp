@@ -242,6 +242,12 @@ int AutoTest_VerifyLocalization(const char* outputDirectory) {
 }
 
 static bool s_enabled = false;
+static int s_deathCount = 0, s_deathsStarted = 0, s_deathsCompleted = 0, s_deathLives = 4;
+static bool s_deathCheckpoint = false, s_deathPending = false, s_deathDecisionSeen = false;
+static bool s_deathTransition = false, s_deathTransitionStarted = false;
+static bool s_deathProgress = false;
+static bool s_deathFullLevel = false;
+static int s_deathWaitFrames = 0, s_deathExpectedLives = 0;
 static std::string s_benchmarkFlow;
 static bool s_benchmarkTriggered = false;
 static f64 s_benchmarkStarted = 0.0;
@@ -390,6 +396,12 @@ void AutoTest_ParseArgs(int argc, char** argv) {
             s_benchmarkScorePercent = std::atoi(argv[++i]);
         }
 #if defined(RECHAN_VISUAL_TESTS)
+        else if (std::strcmp(argv[i], "--death-test") == 0 && hasValue) s_deathCount = std::atoi(argv[++i]);
+        else if (std::strcmp(argv[i], "--death-lives") == 0 && hasValue) s_deathLives = std::atoi(argv[++i]);
+        else if (std::strcmp(argv[i], "--death-checkpoint") == 0) s_deathCheckpoint = true;
+        else if (std::strcmp(argv[i], "--death-after-region") == 0) s_deathTransition = true;
+        else if (std::strcmp(argv[i], "--death-progress") == 0) s_deathProgress = true;
+        else if (std::strcmp(argv[i], "--death-full-level") == 0) s_deathFullLevel = true;
         else if (std::strcmp(argv[i], "--speaker-events") == 0) {
             s_speakerEvents = true;
         }
@@ -480,6 +492,74 @@ bool AutoTest_Step(GameState state) {
         s_startTime = Time::GetTimeInSeconds();
         p3d::display->AddOverlayCallback(CaptureOverlay);
     }
+#if defined(RECHAN_VISUAL_TESTS)
+    if (s_deathCount > 0) {
+        if (Time::GetTimeInSeconds() - s_startTime > 120) {
+            AutoTest_Fail(25, "real death/reload did not finish within 120 seconds"); return false;
+        }
+        if (s_deathPending && state == GameState::DetermineNextGameState) s_deathDecisionSeen = true;
+        if (s_deathPending && s_deathDecisionSeen && state == GameState::QueuePetalLoad && s_deathFullLevel) {
+            s_deathFullLevel = false;
+            LOG_ALWAYS("[DeathTest] exercising full level resource reload after actual death decision");
+            g_game->GetWorld()->SetTargetLevelIndex(g_game->GetWorld()->GetCurrentLevelIndex());
+            g_game->SetState(GameState::QueueLevelLoad);
+            return true;
+        }
+        if (s_deathPending && s_deathExpectedLives <= 0 && state == GameState::EndGameLoop) {
+            LOG_ALWAYS("[DeathTest] PASS actual death script reached Game Over"); s_finished = true; return false;
+        }
+        if (state != GameState::Play || !Player::s_player) return true;
+        auto* player = Player::s_player;
+        if (s_deathPending) {
+            if (!s_deathDecisionSeen) return true;
+            if (player->GetLivesLeft() != s_deathExpectedLives || player->health <= 0) {
+                AutoTest_Fail(25, "real reload did not restore living player with expected lives"); return false;
+            }
+            LOG_ALWAYS("[DeathTest] reload verified lives=%d hp=%d checkpoint=%d region=%u", player->GetLivesLeft(),
+                player->health, player->checkpoint.IsValid(), g_game->GetWorld()->GetCurrentPetalIndex());
+            ++s_deathsCompleted; s_deathPending = false; s_deathWaitFrames = 0;
+            if (s_deathsCompleted == s_deathCount) {
+                LOG_ALWAYS("[DeathTest] PASS actual death/reload cycles=%d", s_deathsCompleted); s_finished = true; return false;
+            }
+        }
+        ++s_deathWaitFrames;
+        if (s_deathProgress && (s_deathWaitFrames == 30 || s_deathWaitFrames == 90 || s_deathWaitFrames == 150)) {
+            int count = 0;
+            for (auto* node = g_ai->moveList.head; node; node = node->next)
+                count += static_cast<Thing*>(node)->thingType == AITypes::TT_ENEMYGENERATOR;
+            if (!count) { AutoTest_Fail(25, "no generator locations for checkpoint progression"); return false; }
+            const int index = s_deathWaitFrames == 30 ? 0 : s_deathWaitFrames == 90 ? count / 2 : count - 1;
+            WarpToGenerator(index);
+            player->OnCheckpoint();
+            LOG_ALWAYS("[DeathTest] synthetic checkpoint progression location=%d/%d block=%u", index, count, player->blockNum);
+        }
+        if (s_deathWaitFrames == 30 && s_warpGenerator >= 0) WarpToGenerator(s_warpGenerator);
+        if (s_deathWaitFrames < (s_deathProgress ? 210 : 90) || (g_director && g_director->scriptState != 0)) return true;
+        auto* world = g_game->GetWorld();
+        if (s_deathTransition && !s_deathTransitionStarted) {
+            if (world->GetCurrentPetalIndex() + 1 >= (u32)world->GetCurLevelPetals()) {
+                AutoTest_Fail(25, "death-after-region requires another region"); return false;
+            }
+            world->SetTargetPetalIndex(world->GetCurrentPetalIndex() + 1);
+            g_game->SetState(GameState::QueuePetalLoad);
+            s_deathTransitionStarted = true; s_deathWaitFrames = 0; return true;
+        }
+        if (s_deathsStarted == 0) player->SetLivesLeft(s_deathLives);
+        if (s_deathCheckpoint) player->OnCheckpoint();
+        else player->checkpoint.SetValidState(0);
+        s_deathExpectedLives = player->GetLivesLeft() - 1;
+        int activeEnemies = 0;
+        if (g_ai) for (auto* node = g_ai->humanoidList.head; node; node = node->next)
+            if (static_cast<Thing*>(node) != player) ++activeEnemies;
+        LOG_ALWAYS("[DeathTest] active enemy humanoids=%d block=%u", activeEnemies, player->blockNum);
+        LOG_ALWAYS("[DeathTest] trigger actual player death lives=%d checkpoint=%d region=%u", player->GetLivesLeft(),
+            player->checkpoint.IsValid(), world->GetCurrentPetalIndex());
+        player->health = 0;
+        player->SetActionState(AS_DEAD, 0);
+        s_deathPending = true; s_deathDecisionSeen = false; ++s_deathsStarted;
+        return true;
+    }
+#endif
 
     if (!s_benchmarkFlow.empty()) {
         if (Time::GetTimeInSeconds() - s_startTime > 90.0) {

@@ -1309,6 +1309,7 @@ void Player::OnCheckpoint() {
     }
     checkpoint.field28 = 0;
     checkpoint.SetValidState(1);
+    LOG_ALWAYS("[Checkpoint] saved block=%d pos=(%d,%d,%d)", checkpoint.field24, pos.x, pos.y, pos.z);
 }
 
 void Player::SetLivesLeft(s32 lives) {

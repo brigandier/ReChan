@@ -56,7 +56,10 @@ project "rechan"
     kind "ConsoleApp"
     language "C++"
     local buildCommit = os.outputof("git rev-parse --short=12 HEAD"):gsub("%s+", "")
-    if buildCommit:match("^[0-9a-f]+$") then defines { 'RECHAN_BUILD_COMMIT="' .. buildCommit .. '"' } end
+    if buildCommit:match("^[0-9a-f]+$") then
+        if os.outputof("git status --porcelain --untracked-files=no"):match("%S") then buildCommit = buildCommit .. "-dirty" end
+        defines { 'RECHAN_BUILD_COMMIT="' .. buildCommit .. '"' }
+    end
     cppdialect "C++20"
     staticruntime "on"
     targetdir "bin"
@@ -143,6 +146,7 @@ project "rechan"
         optimize "on"
 
     filter { "system:windows", "configurations:Release" }
+        symbols "on"
         kind "WindowedApp"
         entrypoint "mainCRTStartup"
 

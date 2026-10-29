@@ -10,11 +10,16 @@
 #include <cstring>
 #include <exception>
 
+#ifndef RECHAN_BUILD_COMMIT
+#define RECHAN_BUILD_COMMIT "unavailable"
+#endif
+
 static constexpr const char* kIssueUrl =
 "https://github.com/SilverwireGames/ReChan/issues/new";
 
 static std::atomic<int> s_gameState{-1}, s_level{-1}, s_region{-1};
 static std::atomic<const char*> s_operation{"startup"};
+static_assert(std::atomic<int>::is_always_lock_free && std::atomic<const char*>::is_always_lock_free);
 void CrashReporter::SetGameContext(int state, int level, int region) {
     s_gameState.store(state); s_level.store(level); s_region.store(region);
 }
@@ -67,9 +72,9 @@ static void WriteCrashReport(EXCEPTION_POINTERS* exceptionInfo, const char* reas
     if (report != INVALID_HANDLE_VALUE) {
         char buffer[2048];
         std::snprintf(buffer, sizeof(buffer),
-            "ReChan fatal report\r\nVersion: %s\r\nPID: %lu\r\nThread: %lu\r\nReason: %s\r\n"
+            "ReChan fatal report\r\nVersion: %s\r\nCommit: %s\r\nPID: %lu\r\nThread: %lu\r\nReason: %s\r\n"
             "Game state: %d\r\nLevel: %d\r\nRegion: %d\r\nLast operation: %s\r\n",
-            GAME_VERSION, GetCurrentProcessId(), GetCurrentThreadId(), reason,
+            GAME_VERSION, RECHAN_BUILD_COMMIT, GetCurrentProcessId(), GetCurrentThreadId(), reason,
             s_gameState.load(), s_level.load(), s_region.load(), s_operation.load());
         WriteHandle(report, buffer);
         WriteHandle(report, "Session log: "); WriteHandle(report, s_logUtf8); WriteHandle(report, "\r\n");
@@ -108,11 +113,19 @@ static void WriteCrashReport(EXCEPTION_POINTERS* exceptionInfo, const char* reas
     if (dump == INVALID_HANDLE_VALUE) return;
     MINIDUMP_EXCEPTION_INFORMATION info{};
     info.ThreadId = GetCurrentThreadId(); info.ExceptionPointers = exceptionInfo; info.ClientPointers = FALSE;
-    MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), dump,
+    const BOOL dumped = MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), dump,
         (MINIDUMP_TYPE)(MiniDumpWithIndirectlyReferencedMemory | MiniDumpWithThreadInfo),
         exceptionInfo ? &info : nullptr, nullptr, nullptr);
+    const DWORD dumpError = dumped ? ERROR_SUCCESS : GetLastError();
     FlushFileBuffers(dump);
     CloseHandle(dump);
+    report = CreateFileW(s_reportPath, FILE_APPEND_DATA, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (report != INVALID_HANDLE_VALUE) {
+        char status[96];
+        std::snprintf(status, sizeof(status), "\r\nNative minidump: %s (Windows error %lu)\r\n", dumped ? "written" : "failed", dumpError);
+        WriteHandle(report, status); FlushFileBuffers(report); CloseHandle(report);
+    }
 }
 
 static void NotifyUser() {
@@ -203,6 +216,7 @@ void CrashReporter::ShowFatalMessage(const char* title, const char* message) {
 
 static volatile sig_atomic_t s_handlingCrash = 0;
 static char s_reportPath[PATH_MAX] = "rechan-crash.txt";
+static char s_logPath[PATH_MAX]{};
 static bool s_suppressDialog = false;
 
 static bool EnsureMinidumpDirectory() {
@@ -283,13 +297,6 @@ static void FatalSignalHandler(int signalNumber, siginfo_t* signalInfo, void*) {
     }
     s_handlingCrash = 1;
 
-    // Create the minidumps directory only now, at crash time, so nothing is
-    // written to the filesystem on a clean run.
-    const bool hasDirectory = EnsureMinidumpDirectory();
-    std::snprintf(s_reportPath, sizeof(s_reportPath),
-                  hasDirectory ? "minidumps/rechan-crash-%ld.txt" : "rechan-crash-%ld.txt",
-                  static_cast<long>(getpid()));
-
     const int report = open(s_reportPath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (report >= 0) {
         char buffer[2048];
@@ -323,7 +330,7 @@ static void FatalSignalHandler(int signalNumber, siginfo_t* signalInfo, void*) {
         WriteFd(report,
                 "\nrechan.log\n"
                 "==========\n");
-        AppendFileToFd(report, "rechan.log");
+        AppendFileToFd(report, s_logPath);
         fsync(report);
         close(report);
     }
@@ -365,6 +372,8 @@ void CrashReporter::ShowFatalMessage(const char* title, const char* message) {
 
 void CrashReporter::Install() {
     s_suppressDialog = std::getenv("RECHAN_CRASH_REPORTER_NO_DIALOG") != nullptr;
+    std::snprintf(s_reportPath, sizeof(s_reportPath), "%s-crash.txt", Log::Get().GetSessionStem().c_str());
+    std::snprintf(s_logPath, sizeof(s_logPath), "%s", Log::Get().GetSessionPath().c_str());
 
     struct sigaction action = {};
     action.sa_sigaction = FatalSignalHandler;
@@ -383,5 +392,14 @@ void CrashReporter::Install() {
 
 [[noreturn]] void CrashReporter::TriggerTestCrash() {
     std::raise(SIGABRT);
+    std::abort();
+}
+
+[[noreturn]] void CrashReporter::TriggerTestException() {
+#if defined(RC_PLATFORM_WINDOWS)
+    RaiseException(EXCEPTION_ACCESS_VIOLATION, EXCEPTION_NONCONTINUABLE, 0, nullptr);
+#else
+    std::raise(SIGSEGV);
+#endif
     std::abort();
 }

@@ -13,12 +13,13 @@ import re
 import statistics
 import subprocess
 import time
+import queue
+import threading
 
 
 def measure(exe, runtime, level, frames, timeout, flow=None, score_percent=None):
     log = runtime / 'rechan.log'
-    if log.exists():
-        log.unlink()
+    legacy_offset = log.stat().st_size if log.exists() else 0
     start = time.perf_counter()
     command = [str(exe), '--autotest', str(level), '--frames', str(frames), '--fps', '60']
     if flow:
@@ -26,11 +27,22 @@ def measure(exe, runtime, level, frames, timeout, flow=None, score_percent=None)
     if score_percent is not None:
         command += ['--benchmark-score-percent', str(score_percent)]
     process = subprocess.Popen(command,
-                               cwd=runtime, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    events, offset, partial, flow_seconds = [], 0, '', None
+                               cwd=runtime, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                               text=True, encoding='utf-8', errors='replace')
+    paths = queue.Queue()
+    def read_diagnostics():
+        for line in process.stderr:
+            if line.startswith('[Session] log='):
+                paths.put(Path(line.split('=', 1)[1].strip()))
+    reader = threading.Thread(target=read_diagnostics, daemon=True)
+    reader.start()
+    events, offset, partial, flow_seconds = [], legacy_offset, '', None
     while True:
         now = time.perf_counter()
+        while not paths.empty():
+            log, offset, partial = paths.get_nowait(), 0, ''
         if log.exists():
+            if log.stat().st_size < offset: offset = 0
             with log.open('r', encoding='utf-8', errors='replace') as stream:
                 stream.seek(offset)
                 chunk = stream.read()

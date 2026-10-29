@@ -9,6 +9,8 @@
 #include "snd/sound.h"
 #include "xclib/xclib.h"
 #include "gen/game.h"
+#include "gen/world.h"
+#include "ai/player.h"
 #include "extra/fecustommenumgr.h"
 #include "p3d/context.h"
 #include "pddi/gl/glrender.h"
@@ -41,6 +43,19 @@ int AutoTest_VerifyRuntime(const char* outputDirectory) {
     std::filesystem::create_directories(output / "pc/text");
     std::filesystem::remove(output / "pc/text/french.txt");
     ActionInput actions;
+    {
+        World unloaded;
+        Check(!unloaded.LoadPetal(0), "region load failure is explicit before any camera or gameplay transition");
+    }
+    {
+        Game uninitialized;
+        Check(!Player::s_player && !uninitialized.Step(), "unopened game can stop before a player exists");
+        Check(uninitialized.HandleStoppedStep(GameState::Null) && uninitialized.GetState() == GameState::Error,
+            "unexpected stopped step enters error state without dereferencing player");
+        uninitialized.SetState(GameState::DetermineGameOverState);
+        Check(!uninitialized.Step() && uninitialized.HandleStoppedStep(GameState::DetermineGameOverState)
+            && uninitialized.GetState() == GameState::DetermineNextGameState, "expected death decision preserves original transition");
+    }
     Check(xcHash("FE_SUB") == 0xa85f3b14, "validator hash vector matches xcHash");
     for (double delta : {0.0, 1.0, -1.0, 0.25, -0.25}) {
         actions.AddVerticalScroll(delta);

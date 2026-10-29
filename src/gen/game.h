@@ -73,6 +73,7 @@ public:
     ~Game() override;
 
     bool Step();
+    bool HandleStoppedStep(GameState previous);
     void SetState(GameState state);
 
     GameState GetState() const { return state; }

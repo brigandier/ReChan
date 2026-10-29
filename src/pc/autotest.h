@@ -22,6 +22,9 @@ enum class GameState : s32;
 // Test builds also accept --speaker-events to exercise the original transient audio path.
 // --speaker-hotplug pauses after two effects until the USB speaker disconnects and reconnects.
 // --sound-menu opens the existing sound page for renderer screenshots.
+// --death-test N [--death-lives N] [--death-checkpoint] triggers AS_DEAD and the original death script.
+// --death-progress visits generator locations with synthetic checkpoints; --death-after-region tests a transition.
+// --death-full-level selects full resource reload after the real death decision (test builds only).
 void AutoTest_ParseArgs(int argc, char** argv);
 bool AutoTest_IsEnabled();
 

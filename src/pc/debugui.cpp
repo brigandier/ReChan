@@ -2537,7 +2537,8 @@ void DebugUI::Draw() {
 
     if (sShowConsoleNotes) {
         if (ImGui::Begin("Console Notes", &sShowConsoleNotes)) {
-            ImGui::TextWrapped("Type a comment and press Enter or Submit. It is printed to console and appended to rechan.log.");
+            ImGui::TextWrapped("Type a comment and press Enter or Submit. It is printed to console and appended to the current session log.");
+            ImGui::TextWrapped("Session log: %s", Log::Get().GetSessionPath().c_str());
 
             bool submit = ImGui::InputText("Comment", sConsoleNoteInput, sizeof(sConsoleNoteInput), ImGuiInputTextFlags_EnterReturnsTrue);
             ImGui::SameLine();

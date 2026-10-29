@@ -280,6 +280,7 @@ void ModLoader::Init() {
     m_mods.clear();
 
     if (!std::filesystem::is_directory(kModsDir)) {
+        LOG_ALWAYS("[ModLoader] no mod directory; no mods loaded");
         return;
     }
 
@@ -292,7 +293,7 @@ void ModLoader::Init() {
     m_verbose = config.verbose;
 
     if (!m_enabled) {
-        LOG("[ModLoader] Disabled via %s ([general] enabled = false)", kIniPath);
+        LOG_ALWAYS("[ModLoader] Disabled via %s ([general] enabled = false)", kIniPath);
         m_initialized = true;
         return;
     }

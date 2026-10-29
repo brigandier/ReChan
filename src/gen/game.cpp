@@ -730,6 +730,20 @@ bool Game::Step() {
     return false;
 }
 
+bool Game::HandleStoppedStep(GameState previous) {
+    if (state == GameState::End) return false;
+    if (previous == GameState::DetermineGameOverState) {
+        SetState(GameState::DetermineNextGameState);
+    }
+    else {
+        // No other state handler defines a stopped-step recovery or a saved life count.
+        LOG_ALWAYS("[Game] unexpected stopped step previous=%d current=%d player=%p", (int)previous, (int)state, Player::s_player);
+        CrashReporter::SetOperation("unexpected stopped game state; entering error menu");
+        SetState(GameState::Error);
+    }
+    return true;
+}
+
 void Game::SetState(GameState s) {
     MARKFUNCTION(0x8002C5AC); // SetState
     if (s == state)
@@ -743,6 +757,7 @@ void Game::SetState(GameState s) {
     CrashReporter::SetGameContext((int)s, diagnosticWorld ? diagnosticWorld->GetCurLevelID() : -1,
         diagnosticWorld ? (int)diagnosticWorld->GetCurrentPetalIndex() : -1);
     if (s == GameState::Play) CrashReporter::SetOperation("gameplay resumed");
+    if (s == GameState::Error) LOG_ALWAYS("[Session] handled-error: game entered Error state");
 
 #if HIGH_FPS_PLAY_PRESENTATION
     auto usesFixedLogicStep = [](GameState s) {
@@ -1995,6 +2010,7 @@ bool Game::gsQueueLevelLoad(Game* game) {
     // PSX: LoadLevel(world, targetLevelIndex) - internally calls Construct
     // which spawns AI entities, resets Director, sets level script
     if (!world->LoadLevelIndex(world->GetTargetLevelIndex())) {
+        LOG_ALWAYS("[Load] full level failed target=%u region=%u", world->GetTargetLevelIndex(), world->GetTargetPetalIndex());
         game->SetState(GameState::Error);
         return true;
     }
@@ -2083,7 +2099,14 @@ bool Game::gsQueuePetalLoad(Game* game) {
 #endif
 
     // PSX: LoadPetal(world, targetPetalIndex)
-    world->LoadPetal(world->GetTargetPetalIndex());
+    if (!world->LoadPetal(world->GetTargetPetalIndex())) {
+#if CUSTOM_MENU
+        g_deferLevelBeginMusic = false;
+#endif
+        CrashReporter::SetOperation("region reload failed; entering error menu");
+        game->SetState(GameState::Error);
+        return true;
+    }
 
     // PSX: Camera setup data is prepared during World::LoadPetal
     // via ExecuteLoadCallbacks -> cameraLoadFunc -> SetupPaths.
@@ -2161,6 +2184,7 @@ bool Game::gsDetermineNextGameState(Game* game) {
             Player::s_player->checkpoint.IsValid(), Player::s_player);
 
         if (lives <= 0) {
+            LOG_ALWAYS("[Death] game over; restoring default continue life count");
             Player::s_player->SetLivesLeft(Player::kMaxLives);
             game->SetState(GameState::EndGame);
         }

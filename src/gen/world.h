@@ -56,7 +56,7 @@ public:
 
     bool Load(const std::string& lcfPath);
     bool LoadLevelIndex(u32 levelIndex);
-    void LoadPetal(u32 petalIndex);
+    bool LoadPetal(u32 petalIndex);
     void LoadLevelNames();
     void LoadPermanent();
     void ProcessSwitches();
