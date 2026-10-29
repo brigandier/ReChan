@@ -324,6 +324,16 @@ int main(int argc, char** argv) {
     TrySetPlatformWindowIcon();
     CrashReporter::SetOperation("graphics context initialized");
 
+#if defined(RECHAN_VISUAL_TESTS) && !defined(RC_PLATFORM_SWITCH) && !defined(RC_PLATFORM_NULL)
+    if (argc >= 2 && std::strcmp(argv[1], "--test-opengl") == 0) {
+        const int result = AutoTest_VerifyOpenGL();
+        platform->DestroyContext(ctx);
+        tPlatform::Destroy();
+        Log::Get().Shutdown(result ? "error" : "normal", result);
+        return result;
+    }
+#endif
+
 #ifdef MOD_LOADER
     if (argc >= 3 && std::strcmp(argv[1], "--verify-glb") == 0) {
         OriginalGeo* geometry = GLTFLoader::LoadGeo(argv[2]);

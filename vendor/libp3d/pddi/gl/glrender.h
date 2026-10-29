@@ -41,9 +41,9 @@ private:
     u32 vao = 0;
     u32 vbo = 0;
     u32 ebo = 0;
-    // Set when the GL objects came from the recycle pool: the first write has
-    // to orphan the storage rather than patch a buffer still in flight.
-    bool orphanOnNextWrite = false;
+    // Each recycled storage object must be orphaned on its own first write.
+    bool orphanVerticesOnNextWrite = false;
+    bool orphanIndicesOnNextWrite = false;
 
     void SetupVertexAttribs();
 };

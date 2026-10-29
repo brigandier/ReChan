@@ -182,7 +182,8 @@ glPrimBuffer::glPrimBuffer(const pddiPrimBufferDesc& desc)
         // The GPU may still be reading the storage from the draw that used
         // this buffer last, so the first write orphans it instead of patching
         // it in place and forcing the driver to sync.
-        orphanOnNextWrite = true;
+        orphanVerticesOnNextWrite = true;
+        orphanIndicesOnNextWrite = true;
         return;
     }
 
@@ -223,7 +224,7 @@ glPrimBuffer::~glPrimBuffer() {
 void glPrimBuffer::SetVertexData(const void* data, u32 count) {
     vertexCount = count;
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    if (count <= vertexCapacity && !orphanOnNextWrite) {
+    if (count <= vertexCapacity && !orphanVerticesOnNextWrite) {
         glBufferSubData(GL_ARRAY_BUFFER, 0, stride * count, data);
         return;
     }
@@ -231,13 +232,14 @@ void glPrimBuffer::SetVertexData(const void* data, u32 count) {
     glBufferData(GL_ARRAY_BUFFER, stride * capacity, nullptr, GL_DYNAMIC_DRAW);
     glBufferSubData(GL_ARRAY_BUFFER, 0, stride * count, data);
     vertexCapacity = capacity;
+    orphanVerticesOnNextWrite = false;
 }
 
 void glPrimBuffer::SetIndices(const u16* indices, u32 count) {
     indexCount = count;
     glBindVertexArray(vao);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-    if (count <= indexCapacity && !orphanOnNextWrite) {
+    if (count <= indexCapacity && !orphanIndicesOnNextWrite) {
         glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, count * sizeof(u16), indices);
     }
     else {
@@ -247,8 +249,7 @@ void glPrimBuffer::SetIndices(const u16* indices, u32 count) {
         indexCapacity = capacity;
     }
     glBindVertexArray(0);
-    // Callers always fill vertices then indices, so clearing here covers both.
-    orphanOnNextWrite = false;
+    orphanIndicesOnNextWrite = false;
 }
 
 void glPrimBuffer::SetupVertexAttribs() {
@@ -436,8 +437,9 @@ bool glRenderTarget::Resize(int w, int h) {
     }
     if (!framebuffer) glGenFramebuffers(1, &framebuffer);
 
-    GLint previous = 0;
-    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previous);
+    GLint previousRead = 0, previousDraw = 0;
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &previousRead);
+    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &previousDraw);
     glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
     if (IsDepthRenderTargetFormat(format)) {
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D,
@@ -459,7 +461,8 @@ bool glRenderTarget::Resize(int w, int h) {
                                texture->GetGLHandle(), 0);
     }
     const bool complete = glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
-    glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, (GLuint)previousRead);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, (GLuint)previousDraw);
     if (!complete) {
         std::fprintf(stderr, "GL: texture render target incomplete (%dx%d, format=%d)\n",
                      w, h, (int)format);

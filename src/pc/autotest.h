@@ -6,6 +6,7 @@ int AutoTest_VerifyEngineIntegration(const char* outputDirectory);
 int AutoTest_ProbeControllerSpeaker(const char* outputDirectory, bool play, int volume);
 int AutoTest_RenderMovieSubtitles(const char* movieDirectory, const char* outputDirectory);
 int AutoTest_VerifyRuntime(const char* outputDirectory);
+int AutoTest_VerifyOpenGL();
 void AutoTest_PrepareExitScenario(Game& game, const char* scenario);
 void AutoTest_CheckShutdown(bool platformDestroyed);
 #endif

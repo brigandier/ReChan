@@ -75,7 +75,8 @@ project "rechan"
 
     if _OPTIONS["tests"] then
         defines { "RECHAN_VISUAL_TESTS" }
-        files { "tests/movievisual.cpp", "tests/printegration.cpp", "tests/runtime.cpp", "tests/speakerprobe.cpp" }
+        includedirs { "vendor/libp3d/vendor/glad/include" }
+        files { "tests/movievisual.cpp", "tests/printegration.cpp", "tests/runtime.cpp", "tests/speakerprobe.cpp", "tests/rendering.cpp" }
     end
 
     filter "system:windows"
