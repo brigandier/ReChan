@@ -71,6 +71,8 @@ public:
     bool SetIdTargetStorage(int w, int h);
 
 private:
+    friend class glRenderTarget;
+    void SwapStorage(glTexture& other);
     u32 handle = 0;
     int width = 0;
     int height = 0;
@@ -431,7 +433,8 @@ private:
     bool multisampleEnabled = true;
     bool resolvedForOverlay = false;
     glRenderTarget* activeRenderTarget = nullptr;
-    s32 savedFramebuffer = 0;
+    s32 savedReadFramebuffer = 0;
+    s32 savedDrawFramebuffer = 0;
     s32 savedViewport[4] = {};
     s32 savedScissor[4] = {};
     bool savedScissorEnabled = false;

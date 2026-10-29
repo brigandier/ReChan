@@ -37,6 +37,104 @@ struct CountStorage {
     ~CountStorage() { glad_glBufferData = originalBufferData; }
 };
 
+PFNGLTEXIMAGE2DPROC originalTexImage2D = nullptr;
+int skippedAllocation = 0;
+void GLAD_API_PTR SkipTextureAllocation(GLenum target, GLint level, GLint internalFormat,
+    GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const void* data) {
+    if (--skippedAllocation != 0)
+        originalTexImage2D(target, level, internalFormat, width, height, border, format, type, data);
+}
+struct FailTextureAllocation {
+    explicit FailTextureAllocation(int allocation) {
+        originalTexImage2D = glad_glTexImage2D;
+        skippedAllocation = allocation;
+        glad_glTexImage2D = SkipTextureAllocation;
+    }
+    ~FailTextureAllocation() { glad_glTexImage2D = originalTexImage2D; }
+};
+
+PFNGLCHECKFRAMEBUFFERSTATUSPROC originalFramebufferStatus = nullptr;
+GLenum GLAD_API_PTR IncompleteFramebuffer(GLenum) { return GL_FRAMEBUFFER_UNSUPPORTED; }
+struct FailFramebuffer {
+    FailFramebuffer() {
+        originalFramebufferStatus = glad_glCheckFramebufferStatus;
+        glad_glCheckFramebufferStatus = IncompleteFramebuffer;
+    }
+    ~FailFramebuffer() { glad_glCheckFramebufferStatus = originalFramebufferStatus; }
+};
+
+void TestRenderTargetRecovery() {
+    GLint maximum = 0;
+    glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maximum);
+    for (auto format : {PDDI_RENDER_TARGET_RGBA8, PDDI_RENDER_TARGET_RGBA16F,
+        PDDI_RENDER_TARGET_DEPTH24, PDDI_RENDER_TARGET_DEPTH32F}) {
+        Target target(p3d::context->CreateRenderTarget(16, 16, format, true));
+        Check(target != nullptr, "recovery fixture creates a valid render target");
+        if (!target) continue;
+        const auto framebuffer = static_cast<glRenderTarget*>(target.get())->GetFramebuffer();
+        auto* texture = target->GetTexture();
+        auto* idTexture = target->GetIdTexture();
+        const auto handle = texture->GetNativeHandle();
+        const auto idHandle = idTexture ? idTexture->GetNativeHandle() : 0;
+        glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+        const GLfloat red[] = {1, 0, 0, 1}, depth = 0.75f;
+        const GLuint id = 37;
+        if (idTexture) {
+            glClearBufferfv(GL_DEPTH, 0, &depth);
+            glClearBufferuiv(GL_COLOR, 0, &id);
+        }
+        else glClearBufferfv(GL_COLOR, 0, red);
+        const auto preserved = [&] {
+            GLint read = 0, draw = 0;
+            glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &read);
+            glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &draw);
+            return target->IsValid() && target->GetWidth() == 16 && target->GetHeight() == 16
+                && texture == target->GetTexture() && texture->GetNativeHandle() == handle
+                && idTexture == target->GetIdTexture()
+                && (!idTexture || idTexture->GetNativeHandle() == idHandle)
+                && read == framebuffer && draw == framebuffer
+                && glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
+        };
+        Check(!target->Resize(maximum + 1, 16), "dimensions above the driver limit are rejected");
+        Check(preserved(), "unsupported resize preserves the complete target and active bindings");
+        Check(glGetError() == GL_NO_ERROR, "unsupported dimensions are rejected before driver allocation");
+        for (int allocation = 1; allocation <= (idTexture ? 2 : 1); ++allocation) {
+            FailTextureAllocation failure(allocation);
+            Check(!target->Resize(32, 24), "missing texture storage is detected");
+            Check(preserved(), "allocation failure preserves both original attachments");
+        }
+        {
+            FailFramebuffer failure;
+            Check(!target->Resize(32, 24), "incomplete framebuffer is rejected");
+        }
+        Check(preserved(), "incomplete framebuffer restores both previous attachments");
+        if (preserved()) {
+            if (idTexture) {
+                GLfloat actualDepth = 0;
+                GLuint actualId = 0;
+                glReadPixels(0, 0, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, &actualDepth);
+                glReadBuffer(GL_COLOR_ATTACHMENT0);
+                glReadPixels(0, 0, 1, 1, GL_RED_INTEGER, GL_UNSIGNED_INT, &actualId);
+                Check(actualDepth == depth && actualId == id, "failed resize retains depth and instance-ID pixels");
+            }
+            else {
+                std::array<unsigned char, 4> pixel{};
+                glReadPixels(0, 0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel.data());
+                Check(pixel[0] == 255 && pixel[1] == 0, "failed resize retains color pixels");
+            }
+        }
+        Check(target->Resize(32, 24) && target->IsValid(), "resize recovers after allocation failure");
+        Check(texture == target->GetTexture() && idTexture == target->GetIdTexture(),
+            "successful resize retains public texture object identities");
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        {
+            FailTextureAllocation failure(1);
+            Target missing(p3d::context->CreateRenderTarget(16, 16, format, true));
+            Check(!missing, "initial allocation failure returns no render target");
+        }
+    }
+}
+
 void TestRenderTargetBindings() {
     Target read(p3d::context->CreateRenderTarget(16, 16, PDDI_RENDER_TARGET_RGBA8));
     Target draw(p3d::context->CreateRenderTarget(16, 16, PDDI_RENDER_TARGET_RGBA8));
@@ -62,6 +160,12 @@ void TestRenderTargetBindings() {
     glReadPixels(0, 0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel.data());
     Check(pixel[0] == 255 && pixel[1] == 0 && pixel[2] == 0,
         "readback after resize reads the original red image, not the green draw target");
+    Check(p3d::context->SetRenderTarget(resized.get()) && p3d::context->SetRenderTarget(nullptr),
+        "temporary render target can be entered and left");
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &actualRead);
+    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &actualDraw);
+    Check(actualRead == readId && actualDraw == drawId,
+        "leaving a render target restores independent read and draw framebuffer bindings");
     Check(!resized->Resize(0, 24) && resized->IsValid()
         && resized->GetWidth() == 32 && resized->GetHeight() == 24,
         "invalid dimensions preserve the previous valid render target");
@@ -130,6 +234,7 @@ void TestMSAA() {
 int AutoTest_VerifyOpenGL() {
     failures = 0;
     TestRenderTargetBindings();
+    TestRenderTargetRecovery();
     TestRecycledBuffers();
     TestMSAA();
     Check(glGetError() == GL_NO_ERROR, "driver reports no OpenGL error");

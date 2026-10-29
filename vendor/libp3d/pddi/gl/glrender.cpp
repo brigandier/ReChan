@@ -315,6 +315,22 @@ glTexture::~glTexture() {
         glDeleteTextures(1, &handle);
 }
 
+void glTexture::SwapStorage(glTexture& other) {
+    std::swap(handle, other.handle);
+    std::swap(width, other.width);
+    std::swap(height, other.height);
+    std::swap(bpp, other.bpp);
+    std::swap(alphaDepth, other.alphaDepth);
+    std::swap(filterMode, other.filterMode);
+}
+
+static bool HasBoundTextureStorage(int width, int height) {
+    GLint actualWidth = 0, actualHeight = 0;
+    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &actualWidth);
+    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &actualHeight);
+    return actualWidth == width && actualHeight == height;
+}
+
 void glTexture::SetData(int w, int h, int b, int a, const void* rgba) {
     width = w;
     height = h;
@@ -355,6 +371,7 @@ bool glTexture::SetRenderTargetStorage(int w, int h, pddiRenderTargetFormat form
         alphaDepth = 0;
         if (handle) glDeleteTextures(1, &handle);
         glGenTextures(1, &handle);
+        if (!handle) return false;
         glBindTexture(GL_TEXTURE_2D, handle);
         const GLint internalFormat = useFloatDepth ? GL_DEPTH_COMPONENT32F : GL_DEPTH_COMPONENT24;
         const GLenum uploadType = useFloatDepth ? GL_FLOAT : GL_UNSIGNED_INT;
@@ -373,25 +390,28 @@ bool glTexture::SetRenderTargetStorage(int w, int h, pddiRenderTargetFormat form
         // shadow shader uses.
         const GLint depthSwizzle[4] = { GL_RED, GL_RED, GL_RED, GL_ONE };
         glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, depthSwizzle);
+        const bool allocated = HasBoundTextureStorage(w, h);
         glBindTexture(GL_TEXTURE_2D, 0);
         filterMode = PDDI_FILTER_BILINEAR;
-        return handle != 0;
+        return allocated;
     }
 
     bpp = (format == PDDI_RENDER_TARGET_RGBA16F) ? 64 : 32;
     alphaDepth = (format == PDDI_RENDER_TARGET_RGBA16F) ? 16 : 8;
     if (handle) glDeleteTextures(1, &handle);
     glGenTextures(1, &handle);
+    if (!handle) return false;
     glBindTexture(GL_TEXTURE_2D, handle);
     const GLint internalFormat = (format == PDDI_RENDER_TARGET_RGBA16F) ? GL_RGBA16F : GL_RGBA8;
     const GLenum dataType = (format == PDDI_RENDER_TARGET_RGBA16F) ? GL_HALF_FLOAT : GL_UNSIGNED_BYTE;
     glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, w, h, 0, GL_RGBA, dataType, nullptr);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    const bool allocated = HasBoundTextureStorage(w, h);
     glBindTexture(GL_TEXTURE_2D, 0);
     filterMode = PDDI_FILTER_BILINEAR;
     ApplyTextureFilterMode(handle, filterMode);
-    return handle != 0;
+    return allocated;
 }
 
 bool glTexture::SetIdTargetStorage(int w, int h) {
@@ -402,15 +422,17 @@ bool glTexture::SetIdTargetStorage(int w, int h) {
     alphaDepth = 0;
     if (handle) glDeleteTextures(1, &handle);
     glGenTextures(1, &handle);
+    if (!handle) return false;
     glBindTexture(GL_TEXTURE_2D, handle);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_R32UI, w, h, 0, GL_RED_INTEGER, GL_UNSIGNED_INT, nullptr);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    const bool allocated = HasBoundTextureStorage(w, h);
     glBindTexture(GL_TEXTURE_2D, 0);
     filterMode = PDDI_FILTER_NONE;
-    return handle != 0;
+    return allocated;
 }
 
 glRenderTarget::glRenderTarget(int w, int h, pddiRenderTargetFormat targetFormat, bool withInstanceId)
@@ -428,25 +450,33 @@ bool glRenderTarget::Resize(int w, int h) {
     if (w <= 0 || h <= 0) return false;
     const bool needsId = wantsIdAttachment && IsDepthRenderTargetFormat(format);
     if (valid && framebuffer && texture && (!needsId || idTexture) && width == w && height == h) return true;
-    valid = false;
-    if (!texture) texture = new glTexture();
-    if (!texture->SetRenderTargetStorage(w, h, format)) return false;
-    if (needsId) {
-        if (!idTexture) idTexture = new glTexture();
-        if (!idTexture->SetIdTargetStorage(w, h)) return false;
-    }
-    if (!framebuffer) glGenFramebuffers(1, &framebuffer);
+    GLint maximum = 0;
+    glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maximum);
+    if (w > maximum || h > maximum) return false;
+
+    // Keep the current attachments usable until every replacement is complete.
+    glTexture replacement, replacementId;
+    if (!replacement.SetRenderTargetStorage(w, h, format)) return false;
+    if (needsId && !replacementId.SetIdTargetStorage(w, h)) return false;
+    GLuint replacementFramebuffer = framebuffer;
+    if (!replacementFramebuffer) glGenFramebuffers(1, &replacementFramebuffer);
+    if (!replacementFramebuffer) return false;
 
     GLint previousRead = 0, previousDraw = 0;
     glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &previousRead);
     glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &previousDraw);
-    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
-    if (IsDepthRenderTargetFormat(format)) {
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D,
-                               texture->GetGLHandle(), 0);
-        if (needsId) {
+    glBindFramebuffer(GL_FRAMEBUFFER, replacementFramebuffer);
+    const auto attach = [&](glTexture* colorOrDepth, glTexture* instanceId) {
+        glFramebufferTexture2D(GL_FRAMEBUFFER,
+            IsDepthRenderTargetFormat(format) ? GL_DEPTH_ATTACHMENT : GL_COLOR_ATTACHMENT0,
+            GL_TEXTURE_2D, colorOrDepth->GetGLHandle(), 0);
+        if (needsId)
             glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
-                                   idTexture->GetGLHandle(), 0);
+                instanceId->GetGLHandle(), 0);
+    };
+    attach(&replacement, &replacementId);
+    if (!framebuffer && IsDepthRenderTargetFormat(format)) {
+        if (needsId) {
             static const GLenum kDrawBuffers[1] = { GL_COLOR_ATTACHMENT0 };
             glDrawBuffers(1, kDrawBuffers);
             glReadBuffer(GL_NONE);
@@ -456,18 +486,23 @@ bool glRenderTarget::Resize(int w, int h) {
             glReadBuffer(GL_NONE);
         }
     }
-    else {
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
-                               texture->GetGLHandle(), 0);
-    }
     const bool complete = glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
+    if (!complete && framebuffer) attach(texture, idTexture);
     glBindFramebuffer(GL_READ_FRAMEBUFFER, (GLuint)previousRead);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, (GLuint)previousDraw);
     if (!complete) {
+        if (!framebuffer) glDeleteFramebuffers(1, &replacementFramebuffer);
         std::fprintf(stderr, "GL: texture render target incomplete (%dx%d, format=%d)\n",
                      w, h, (int)format);
         return false;
     }
+    if (!texture) texture = new glTexture();
+    texture->SwapStorage(replacement);
+    if (needsId) {
+        if (!idTexture) idTexture = new glTexture();
+        idTexture->SwapStorage(replacementId);
+    }
+    framebuffer = replacementFramebuffer;
     width = w;
     height = h;
     valid = true;
@@ -1665,7 +1700,8 @@ bool glContext::SetRenderTarget(pddiRenderTarget* target) {
     if (target && (!glTarget || !glTarget->IsValid())) return false;
 
     if (glTarget && !activeRenderTarget) {
-        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &savedFramebuffer);
+        glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &savedReadFramebuffer);
+        glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &savedDrawFramebuffer);
         glGetIntegerv(GL_VIEWPORT, savedViewport);
         glGetIntegerv(GL_SCISSOR_BOX, savedScissor);
         savedScissorEnabled = glIsEnabled(GL_SCISSOR_TEST) == GL_TRUE;
@@ -1679,7 +1715,8 @@ bool glContext::SetRenderTarget(pddiRenderTarget* target) {
         activeRenderTarget = glTarget;
     }
     else if (activeRenderTarget) {
-        glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)savedFramebuffer);
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, (GLuint)savedReadFramebuffer);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, (GLuint)savedDrawFramebuffer);
         glViewport(savedViewport[0], savedViewport[1], savedViewport[2], savedViewport[3]);
         glScissor(savedScissor[0], savedScissor[1], savedScissor[2], savedScissor[3]);
         if (!savedScissorEnabled) glDisable(GL_SCISSOR_TEST);
